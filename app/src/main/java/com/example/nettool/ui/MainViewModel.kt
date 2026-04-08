@@ -42,3 +42,76 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun updateIpInput(ip: String) {
+        _uiState.update { it.copy(ipInput = ip) }
+    }
+
+    fun updateNoteInput(note: String) {
+        _uiState.update { it.copy(noteInput = note) }
+    }
+
+    fun updateSearchQuery(query: String) {
+        _uiState.update { it.copy(searchQuery = query) }
+        
+        // 实时搜索
+        if (query.isBlank()) {
+            viewModelScope.launch {
+                addressDao.getAllAddresses().collect { addresses ->
+                    _uiState.update { currentState ->
+                        currentState.copy(addresses = addresses)
+                    }
+                }
+            }
+        } else {
+            viewModelScope.launch {
+                addressDao.searchAddresses("%$query%").collect { addresses ->
+                    _uiState.update { currentState ->
+                        currentState.copy(addresses = addresses)
+                    }
+                }
+            }
+        }
+    }
+
+    fun ping(host: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isPinging = true, errorMessage = null) }
+            
+            try {
+                val result = Pinger.ping(host)
+                _uiState.update { 
+                    it.copy(
+                        pingResult = result,
+                        isPinging = false,
+                        errorMessage = if (result.success) null else result.errorMessage
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update { 
+                    it.copy(
+                        isPinging = false,
+                        errorMessage = e.message ?: "Unknown error"
+                    )
+                }
+            }
+        }
+    }
+
+    fun saveAddress(ip: String, note: String) {
+        viewModelScope.launch {
+            val address = Address(ip = ip, note = note)
+            addressDao.insert(address)
+            // 清空输入
+            _uiState.update { it.copy(noteInput = "") }
+        }
+    }
+
+    fun deleteAddress(address: Address) {
+        viewModelScope.launch {
+            addressDao.delete(address)
+        }
+    }
+
+    fun clearPingResult() {
+        _uiState.update { it.copy(pingResult = null) }
+    }
+}
