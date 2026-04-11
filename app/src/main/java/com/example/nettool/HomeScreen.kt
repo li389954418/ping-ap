@@ -16,7 +16,7 @@ import kotlinx.coroutines.*
 fun HomeScreen() {
     // Ping 参数
     var targetAddress by remember { mutableStateOf("") }
-    var pingCount by remember { mutableStateOf("4") }
+    var pingCount by remember { mutableStateOf("0") }
     var pingSize by remember { mutableStateOf("56") }
 
     // 输出结果
