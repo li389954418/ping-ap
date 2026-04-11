@@ -140,7 +140,7 @@ fun SavedListScreen(
         }
     }
 
-    // 详情弹窗（包含编辑入口）
+    // 详情弹窗（已移除"额外备注:"标题，直接显示内容）
     showDetailDialog?.let { entry ->
         val extraJson = try {
             JSONObject(entry.extraRemarks)
@@ -160,12 +160,9 @@ fun SavedListScreen(
                     Text("客户名称: ${entry.name}")
                     Text("IP/域名: ${entry.address}")
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text("额外备注:", style = MaterialTheme.typography.titleSmall)
-                    if (items.isEmpty()) {
-                        Text("  无")
-                    } else {
+                    if (items.isNotEmpty()) {
                         items.forEach { (k, v) ->
-                            Text("  $k: $v")
+                            Text("$k: $v")
                         }
                     }
                 }
@@ -190,7 +187,7 @@ fun SavedListScreen(
     if (editingEntry != null) {
         AlertDialog(
             onDismissRequest = { editingEntry = null },
-            title = { /* 空白标题 */ },
+            title = { /* 无标题 */ },
             text = {
                 Column {
                     OutlinedTextField(
