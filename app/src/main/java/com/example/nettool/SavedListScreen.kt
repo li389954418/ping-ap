@@ -31,11 +31,9 @@ fun SavedListScreen(
     var editingEntry by remember { mutableStateOf<IpEntry?>(null) }
     var showDetailDialog by remember { mutableStateOf<IpEntry?>(null) }
 
-    // 编辑时临时存储的备注项（键值对）
     var remarkItems by remember { mutableStateOf(listOf<Pair<String, String>>()) }
     var mainRemark by remember { mutableStateOf("") }
 
-    // 长按菜单状态
     var menuExpanded by remember { mutableStateOf(false) }
     var selectedEntryForMenu by remember { mutableStateOf<IpEntry?>(null) }
 
@@ -52,18 +50,6 @@ fun SavedListScreen(
             items.add(key to json.optString(key, ""))
         }
         remarkItems = items
-    }
-
-    // 从额外备注中提取客户地址
-    fun getCustomerAddress(extraRemarks: String): String {
-        return try {
-            val json = JSONObject(extraRemarks)
-            json.optString("地址", "").ifBlank {
-                json.optString("address", "").ifBlank { "—" }
-            }
-        } catch (e: Exception) {
-            "—"
-        }
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
@@ -97,45 +83,41 @@ fun SavedListScreen(
                         },
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                 ) {
-                    Column(
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(16.dp)
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // 客户名称（小字体）
-                        Text(
-                            text = entry.name.ifBlank { "未命名" },
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        // IP 地址（大字体）
-                        Text(
-                            text = entry.address,
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        // 客户地址（小字体）
-                        Text(
-                            text = "📍 ${getCustomerAddress(entry.extraRemarks)}",
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = entry.name.ifBlank { "未命名" },
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = entry.address,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                        IconButton(
+                            onClick = { showDetailDialog = entry }
+                        ) {
+                            Icon(
+                                Icons.Default.Search,
+                                contentDescription = "查看详情",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
                     }
 
                     DropdownMenu(
                         expanded = menuExpanded && selectedEntryForMenu?.id == entry.id,
                         onDismissRequest = { menuExpanded = false }
                     ) {
-                        DropdownMenuItem(
-                            text = { Text("编辑") },
-                            onClick = {
-                                menuExpanded = false
-                                startEditing(entry)
-                            },
-                            leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }
-                        )
                         DropdownMenuItem(
                             text = { Text("删除") },
                             onClick = {
@@ -158,7 +140,7 @@ fun SavedListScreen(
         }
     }
 
-    // 详情弹窗
+    // 详情弹窗（包含编辑入口）
     showDetailDialog?.let { entry ->
         val extraJson = try {
             JSONObject(entry.extraRemarks)
@@ -204,14 +186,13 @@ fun SavedListScreen(
         )
     }
 
-    // 编辑对话框（无标题，字段标签已调整）
+    // 编辑对话框
     if (editingEntry != null) {
         AlertDialog(
             onDismissRequest = { editingEntry = null },
             title = { /* 空白标题 */ },
             text = {
                 Column {
-                    // 客户名称
                     OutlinedTextField(
                         value = mainRemark,
                         onValueChange = { mainRemark = it },
@@ -220,7 +201,6 @@ fun SavedListScreen(
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(modifier = Modifier.height(16.dp))
-                    // 备注列表
                     LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
                         itemsIndexed(remarkItems) { index, (key, value) ->
                             Row(
@@ -261,7 +241,6 @@ fun SavedListScreen(
                         }
                     }
                     Spacer(modifier = Modifier.height(8.dp))
-                    // 新增备注按钮
                     TextButton(
                         onClick = {
                             remarkItems = remarkItems + ("" to "")
