@@ -4,16 +4,19 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen() {
+fun HomeScreen(viewModel: MainViewModel = viewModel()) {
     // 协议选择
     var useICMP by remember { mutableStateOf(true) }
 
@@ -35,14 +38,25 @@ fun HomeScreen() {
     val scope = rememberCoroutineScope()
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        // 目标地址输入
-        OutlinedTextField(
-            value = targetAddress,
-            onValueChange = { targetAddress = it },
-            label = { Text("目标 IP 或域名") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true
-        )
+        // 目标地址输入 + 保存按钮
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(
+                value = targetAddress,
+                onValueChange = { targetAddress = it },
+                label = { Text("目标 IP 或域名") },
+                modifier = Modifier.weight(1f),
+                singleLine = true
+            )
+            IconButton(
+                onClick = {
+                    if (targetAddress.isNotBlank()) {
+                        viewModel.addEntry(targetAddress, targetAddress)
+                    }
+                }
+            ) {
+                Icon(Icons.Default.Save, contentDescription = "保存地址")
+            }
+        }
 
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -119,7 +133,6 @@ fun HomeScreen() {
                         isRunning = false
                         outputLines = outputLines + "\n--- 已停止 ---"
                     } else {
-                        // 取消旧任务（如果有），避免残留
                         pingJob?.cancel()
                         pingJob = null
                         outputLines = emptyList()
