@@ -15,32 +15,48 @@ import kotlinx.coroutines.*
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(viewModel: MainViewModel = viewModel()) {
-    // 协议选择
     var useICMP by remember { mutableStateOf(true) }
-
-    // 通用参数
     var targetAddress by remember { mutableStateOf("") }
     var pingCount by remember { mutableStateOf("0") }
-
-    // ICMP 参数
     var pingSize by remember { mutableStateOf("56") }
-
-    // TCP 参数
     var pingPort by remember { mutableStateOf("80") }
 
-    // 输出结果
     var outputLines by remember { mutableStateOf(listOf<String>()) }
     var isRunning by remember { mutableStateOf(false) }
     var pingJob by remember { mutableStateOf<Job?>(null) }
 
     val scope = rememberCoroutineScope()
 
-    // 监听存储页选择的地址
+    // 监听存储页选择的地址（仅填充输入框，不自动开始）
     val selectedAddress by viewModel.selectedAddress.collectAsState()
     LaunchedEffect(selectedAddress) {
         if (selectedAddress.isNotBlank()) {
             targetAddress = selectedAddress
             viewModel.setSelectedAddress("")
+        }
+    }
+
+    // 监听自动 Ping 请求（填充并自动开始）
+    val autoPingAddress by viewModel.autoPingAddress.collectAsState()
+    LaunchedEffect(autoPingAddress) {
+        if (autoPingAddress.isNotBlank()) {
+            targetAddress = autoPingAddress
+            // 自动开始 Ping（模拟点击开始按钮）
+            if (!isRunning) {
+                startPing(
+                    address = autoPingAddress,
+                    useICMP = useICMP,
+                    pingCount = pingCount,
+                    pingSize = pingSize,
+                    pingPort = pingPort,
+                    scope = scope,
+                    onStart = { job -> pingJob = job; isRunning = true },
+                    onLine = { line -> outputLines = outputLines + line },
+                    onFinish = { isRunning = false; pingJob = null },
+                    onCancel = { isRunning = false; pingJob = null }
+                )
+            }
+            viewModel.clearAutoPing()
         }
     }
 
@@ -137,40 +153,19 @@ fun HomeScreen(viewModel: MainViewModel = viewModel()) {
                 onClick = {
                     if (isRunning) {
                         pingJob?.cancel()
-                        isRunning = false
-                        outputLines = outputLines + "\n--- 已停止 ---"
                     } else {
-                        pingJob?.cancel()
-                        pingJob = null
-                        outputLines = emptyList()
-                        isRunning = true
-                        pingJob = scope.launch {
-                            try {
-                                val flow = if (useICMP) {
-                                    IcmpPing.ping(
-                                        host = targetAddress,
-                                        count = pingCount.toIntOrNull() ?: 0,
-                                        packetSize = pingSize.toIntOrNull() ?: 56
-                                    )
-                                } else {
-                                    TcpPing.ping(
-                                        host = targetAddress,
-                                        count = pingCount.toIntOrNull() ?: 0,
-                                        port = pingPort.toIntOrNull() ?: 80
-                                    )
-                                }
-                                flow.collect { line ->
-                                    outputLines = outputLines + line
-                                }
-                            } catch (e: CancellationException) {
-                                outputLines = outputLines + "\n--- 已取消 ---"
-                            } catch (e: Exception) {
-                                outputLines = outputLines + "\n发生错误: ${e.message}"
-                            } finally {
-                                isRunning = false
-                                pingJob = null
-                            }
-                        }
+                        startPing(
+                            address = targetAddress,
+                            useICMP = useICMP,
+                            pingCount = pingCount,
+                            pingSize = pingSize,
+                            pingPort = pingPort,
+                            scope = scope,
+                            onStart = { job -> pingJob = job; isRunning = true; outputLines = emptyList() },
+                            onLine = { line -> outputLines = outputLines + line },
+                            onFinish = { isRunning = false; pingJob = null },
+                            onCancel = { outputLines = outputLines + "\n--- 已停止 ---"; isRunning = false; pingJob = null }
+                        )
                     }
                 },
                 enabled = targetAddress.isNotBlank(),
@@ -190,7 +185,6 @@ fun HomeScreen(viewModel: MainViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // 结果标题
         Text(
             text = if (useICMP) "📡 ICMP Ping 结果" else "🔌 TCP Ping 结果 (端口 ${pingPort.ifBlank { "80" }})",
             style = MaterialTheme.typography.titleSmall
@@ -212,4 +206,45 @@ fun HomeScreen(viewModel: MainViewModel = viewModel()) {
             }
         }
     }
+}
+
+// 抽取启动 Ping 的逻辑，便于复用
+private fun startPing(
+    address: String,
+    useICMP: Boolean,
+    pingCount: String,
+    pingSize: String,
+    pingPort: String,
+    scope: CoroutineScope,
+    onStart: (Job) -> Unit,
+    onLine: (String) -> Unit,
+    onFinish: () -> Unit,
+    onCancel: (() -> Unit)? = null
+) {
+    onStart(scope.launch {
+        try {
+            val flow = if (useICMP) {
+                IcmpPing.ping(
+                    host = address,
+                    count = pingCount.toIntOrNull() ?: 0,
+                    packetSize = pingSize.toIntOrNull() ?: 56
+                )
+            } else {
+                TcpPing.ping(
+                    host = address,
+                    count = pingCount.toIntOrNull() ?: 0,
+                    port = pingPort.toIntOrNull() ?: 80
+                )
+            }
+            flow.collect { line ->
+                onLine(line)
+            }
+        } catch (e: CancellationException) {
+            onCancel?.invoke()
+        } catch (e: Exception) {
+            onLine("\n发生错误: ${e.message}")
+        } finally {
+            onFinish()
+        }
+    })
 }
