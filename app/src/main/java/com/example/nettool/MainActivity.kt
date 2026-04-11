@@ -10,8 +10,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -26,7 +28,15 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun PingApp() {
-    val viewModel: MainViewModel = viewModel()
+    val context = LocalContext.current
+    val viewModelStoreOwner = checkNotNull(LocalViewModelStoreOwner.current) {
+        "No ViewModelStoreOwner was provided via LocalViewModelStoreOwner"
+    }
+    val viewModel: MainViewModel = remember {
+        val factory = ViewModelProvider.AndroidViewModelFactory.getInstance(context.applicationContext as android.app.Application)
+        ViewModelProvider(viewModelStoreOwner, factory).get(MainViewModel::class.java)
+    }
+
     val entries by viewModel.entries.collectAsState()
     val pingResult by viewModel.pingResult.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
@@ -36,7 +46,6 @@ fun PingApp() {
     var newAddress by remember { mutableStateOf("") }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        // 快速 Ping 卡片
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
@@ -68,7 +77,6 @@ fun PingApp() {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Ping 结果展示
         if (pingResult.isNotBlank()) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -85,7 +93,6 @@ fun PingApp() {
 
         Divider()
 
-        // 保存常用地址区域
         Spacer(modifier = Modifier.height(8.dp))
         Text(text = "📋 保存常用地址", style = MaterialTheme.typography.titleMedium)
 
@@ -130,7 +137,6 @@ fun PingApp() {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // 地址列表
         LazyColumn(modifier = Modifier.weight(1f)) {
             items(entries) { entry ->
                 Card(
