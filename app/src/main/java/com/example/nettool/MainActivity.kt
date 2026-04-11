@@ -25,7 +25,8 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun PingApp(viewModel: MainViewModel = viewModel<MainViewModel>()) {
+fun PingApp() {
+    val viewModel: MainViewModel = viewModel()
     val entries by viewModel.entries.collectAsState()
     val pingResult by viewModel.pingResult.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
@@ -35,6 +36,7 @@ fun PingApp(viewModel: MainViewModel = viewModel<MainViewModel>()) {
     var newAddress by remember { mutableStateOf("") }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+        // 快速 Ping 卡片
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
@@ -66,6 +68,7 @@ fun PingApp(viewModel: MainViewModel = viewModel<MainViewModel>()) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // Ping 结果展示
         if (pingResult.isNotBlank()) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -82,6 +85,7 @@ fun PingApp(viewModel: MainViewModel = viewModel<MainViewModel>()) {
 
         Divider()
 
+        // 保存常用地址区域
         Spacer(modifier = Modifier.height(8.dp))
         Text(text = "📋 保存常用地址", style = MaterialTheme.typography.titleMedium)
 
@@ -126,6 +130,7 @@ fun PingApp(viewModel: MainViewModel = viewModel<MainViewModel>()) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // 地址列表
         LazyColumn(modifier = Modifier.weight(1f)) {
             items(entries) { entry ->
                 Card(
