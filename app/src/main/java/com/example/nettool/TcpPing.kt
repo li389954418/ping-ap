@@ -9,11 +9,11 @@ import java.net.InetSocketAddress
 import java.net.Socket
 import kotlin.math.round
 
-object PingNative {
+object TcpPing {
     fun ping(
         host: String,
         count: Int = 4,
-        packetSize: Int = 56,
+        packetSize: Int = 56, // 忽略，保留参数统一
         port: Int = 80,
         timeout: Int = 2000
     ): Flow<String> = flow {
