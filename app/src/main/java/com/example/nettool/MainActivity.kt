@@ -52,18 +52,33 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.padding(innerPadding)
                     ) {
                         composable(Screen.Home.route) {
-                            HomeScreen(viewModel = viewModel)
+                            HomeScreen(
+                                viewModel = viewModel,
+                                onNavigateToSmartParse = { navController.navigate(Screen.SmartParse.route) }
+                            )
                         }
                         composable(Screen.SavedList.route) {
                             SavedListScreen(
                                 viewModel = viewModel,
-                                onNavigateToHome = {
-                                    navController.navigate(Screen.Home.route)
-                                }
+                                onNavigateToHome = { navController.navigate(Screen.Home.route) }
                             )
                         }
                         composable(Screen.Settings.route) {
-                            SettingsScreen()
+                            SettingsScreen(
+                                navController = navController
+                            )
+                        }
+                        composable(Screen.SmartParse.route) {
+                            SmartParseScreen(
+                                viewModel = viewModel,
+                                onBack = { navController.popBackStack() }
+                            )
+                        }
+                        composable("template_management") {
+                            TemplateManagementScreen(
+                                viewModel = viewModel,
+                                onBack = { navController.popBackStack() }
+                            )
                         }
                     }
                 }
