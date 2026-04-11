@@ -37,9 +37,10 @@ fun PingApp() {
     }
     val viewModel: MainViewModel = ViewModelProvider(viewModelStoreOwner, factory).get(MainViewModel::class.java)
 
-    val entries by viewModel.entries.collectAsState()
-    val pingResult by viewModel.pingResult.collectAsState()
-    val searchQuery by viewModel.searchQuery.collectAsState()
+    // 修复：添加了collectAsState()所需的initial初始值参数
+    val entries by viewModel.entries.collectAsState(initial = emptyList())
+    val pingResult by viewModel.pingResult.collectAsState(initial = "")
+    val searchQuery by viewModel.searchQuery.collectAsState(initial = "")
 
     var quickAddress by remember { mutableStateOf("") }
     var newName by remember { mutableStateOf("") }
@@ -166,3 +167,4 @@ fun PingApp() {
         }
     }
 }
+
