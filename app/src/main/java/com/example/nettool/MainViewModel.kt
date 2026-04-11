@@ -45,8 +45,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun pingAddress(address: String) {
         viewModelScope.launch {
             _pingResult.value = "正在 Ping $address ...\n"
-            PingUtil.pingWithFlow(address).collect { line ->
-                _pingResult.value = _pingResult.value + line + "\n"
+            try {
+                PingNative.ping(address).collect { line ->
+                    _pingResult.value = _pingResult.value + line + "\n"
+                }
+            } catch (e: Exception) {
+                _pingResult.value = _pingResult.value + "Ping 失败: ${e.message}\n"
             }
         }
     }
