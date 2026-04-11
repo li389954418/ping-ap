@@ -15,7 +15,7 @@ import kotlinx.coroutines.*
 @Composable
 fun HomeScreen() {
     // 协议选择
-    var useICMP by remember { mutableStateOf(true) }  // 默认 ICMP
+    var useICMP by remember { mutableStateOf(true) }
 
     // 通用参数
     var targetAddress by remember { mutableStateOf("") }
@@ -66,7 +66,7 @@ fun HomeScreen() {
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // 参数区域（根据协议变化）
+        // 参数区域
         if (useICMP) {
             Row(modifier = Modifier.fillMaxWidth()) {
                 OutlinedTextField(
@@ -119,6 +119,9 @@ fun HomeScreen() {
                         isRunning = false
                         outputLines = outputLines + "\n--- 已停止 ---"
                     } else {
+                        // 取消旧任务（如果有），避免残留
+                        pingJob?.cancel()
+                        pingJob = null
                         outputLines = emptyList()
                         isRunning = true
                         pingJob = scope.launch {
