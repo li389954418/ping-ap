@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -18,7 +19,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.delay
 import org.json.JSONObject
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
 @Composable
 fun SavedListScreen(
     viewModel: MainViewModel = viewModel(),
@@ -30,13 +31,11 @@ fun SavedListScreen(
     var editingEntry by remember { mutableStateOf<IpEntry?>(null) }
     var showDetailDialog by remember { mutableStateOf<IpEntry?>(null) }
 
-    // 编辑时的额外备注列表
     var remarkItems by remember { mutableStateOf(listOf<Pair<String, String>>()) }
     var newKey by remember { mutableStateOf("") }
     var newValue by remember { mutableStateOf("") }
     var mainRemark by remember { mutableStateOf("") }
 
-    // 初始化编辑数据
     fun startEditing(entry: IpEntry) {
         editingEntry = entry
         mainRemark = entry.name
@@ -65,46 +64,91 @@ fun SavedListScreen(
 
         LazyColumn(modifier = Modifier.weight(1f)) {
             items(entries, key = { it.id }) { entry ->
-                SwipeBox(
-                    onEdit = { startEditing(entry) },
-                    onDelete = { viewModel.deleteEntry(entry) }
-                ) {
-                    // 前景内容
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp)
-                            .clickable {
-                                viewModel.triggerAutoPing(entry.address)
-                                onNavigateToHome()
-                            },
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                    ) {
-                        Row(
+                val dismissState = rememberDismissState(
+                    confirmStateChange = { dismissValue ->
+                        when (dismissValue) {
+                            DismissValue.DismissedToEnd -> {
+                                startEditing(entry)
+                                false // 不自动移除条目
+                            }
+                            DismissValue.DismissedToStart -> {
+                                viewModel.deleteEntry(entry)
+                                true // 条目会被移除，由数据变化触发UI更新
+                            }
+                            else -> false
+                        }
+                    }
+                )
+
+                SwipeToDismiss(
+                    state = dismissState,
+                    directions = setOf(DismissDirection.EndToStart, DismissDirection.StartToEnd),
+                    background = {
+                        val direction = dismissState.dismissDirection
+                        val color = when (direction) {
+                            DismissDirection.StartToEnd -> Color(0xFF4CAF50)
+                            DismissDirection.EndToStart -> Color(0xFFF44336)
+                            else -> Color.Transparent
+                        }
+                        Box(modifier = Modifier.fillMaxSize().background(color)) {
+                            when (direction) {
+                                DismissDirection.StartToEnd -> {
+                                    Icon(
+                                        Icons.Default.Edit,
+                                        contentDescription = "编辑",
+                                        tint = Color.White,
+                                        modifier = Modifier.align(Alignment.CenterStart).padding(start = 24.dp)
+                                    )
+                                }
+                                DismissDirection.EndToStart -> {
+                                    Icon(
+                                        Icons.Default.Delete,
+                                        contentDescription = "删除",
+                                        tint = Color.White,
+                                        modifier = Modifier.align(Alignment.CenterEnd).padding(end = 24.dp)
+                                    )
+                                }
+                                else -> {}
+                            }
+                        }
+                    },
+                    dismissContent = {
+                        Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(16.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                                .padding(vertical = 4.dp)
+                                .clickable {
+                                    viewModel.triggerAutoPing(entry.address)
+                                    onNavigateToHome()
+                                },
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                         ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(entry.name, style = MaterialTheme.typography.bodyLarge)
-                                Text(entry.address, style = MaterialTheme.typography.bodySmall)
-                                val extraCount = try {
-                                    JSONObject(entry.extraRemarks).length()
-                                } catch (e: Exception) {
-                                    0
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(entry.name, style = MaterialTheme.typography.bodyLarge)
+                                    Text(entry.address, style = MaterialTheme.typography.bodySmall)
+                                    val extraCount = try {
+                                        JSONObject(entry.extraRemarks).length()
+                                    } catch (e: Exception) {
+                                        0
+                                    }
+                                    if (extraCount > 0) {
+                                        Text("额外备注: $extraCount 项", style = MaterialTheme.typography.bodySmall)
+                                    }
                                 }
-                                if (extraCount > 0) {
-                                    Text("额外备注: $extraCount 项", style = MaterialTheme.typography.bodySmall)
+                                IconButton(onClick = { showDetailDialog = entry }) {
+                                    Icon(Icons.Default.MoreVert, contentDescription = "详情")
                                 }
-                            }
-                            IconButton(onClick = { showDetailDialog = entry }) {
-                                Icon(Icons.Default.MoreVert, contentDescription = "详情")
                             }
                         }
                     }
-                }
+                )
             }
         }
     }
@@ -243,60 +287,4 @@ fun SavedListScreen(
             }
         )
     }
-}
-
-// 可复用的滑动组件
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun SwipeBox(
-    onEdit: () -> Unit,
-    onDelete: () -> Unit,
-    content: @Composable () -> Unit
-) {
-    val swipeState = rememberSwipeToDismissBoxState()
-    val isDismissed = swipeState.currentValue != SwipeToDismissBoxValue.Settled
-
-    LaunchedEffect(isDismissed) {
-        if (isDismissed) {
-            when (swipeState.dismissDirection) {
-                SwipeToDismissBoxValue.StartToEnd -> onEdit()
-                SwipeToDismissBoxValue.EndToStart -> onDelete()
-                else -> {}
-            }
-        }
-    }
-
-    SwipeToDismissBox(
-        state = swipeState,
-        backgroundContent = {
-            val direction = swipeState.dismissDirection
-            val color = when (direction) {
-                SwipeToDismissBoxValue.StartToEnd -> Color(0xFF4CAF50) // 绿色编辑
-                SwipeToDismissBoxValue.EndToStart -> Color(0xFFF44336) // 红色删除
-                else -> Color.Transparent
-            }
-            Box(modifier = Modifier.fillMaxSize().background(color)) {
-                when (direction) {
-                    SwipeToDismissBoxValue.StartToEnd -> {
-                        Icon(
-                            Icons.Default.Edit,
-                            contentDescription = "编辑",
-                            tint = Color.White,
-                            modifier = Modifier.align(Alignment.CenterStart).padding(start = 24.dp)
-                        )
-                    }
-                    SwipeToDismissBoxValue.EndToStart -> {
-                        Icon(
-                            Icons.Default.Delete,
-                            contentDescription = "删除",
-                            tint = Color.White,
-                            modifier = Modifier.align(Alignment.CenterEnd).padding(end = 24.dp)
-                        )
-                    }
-                    else -> {}
-                }
-            }
-        },
-        content = { Box(modifier = Modifier.fillMaxSize()) { content() } }
-    )
 }
