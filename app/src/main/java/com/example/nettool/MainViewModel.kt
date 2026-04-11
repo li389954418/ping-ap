@@ -26,6 +26,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _pingResult = MutableStateFlow("")
     val pingResult: StateFlow<String> = _pingResult
 
+    private val _selectedAddress = MutableStateFlow("")
+    val selectedAddress: StateFlow<String> = _selectedAddress
+
     fun updateSearchQuery(query: String) {
         _searchQuery.value = query
     }
@@ -53,5 +56,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _pingResult.value = _pingResult.value + "Ping 失败: ${e.message}\n"
             }
         }
+    }
+
+    fun setSelectedAddress(address: String) {
+        _selectedAddress.value = address
     }
 }
