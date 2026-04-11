@@ -46,7 +46,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _pingResult.value = "正在 Ping $address ...\n"
             try {
-                PingNative.ping(address).collect { line ->
+                IcmpPing.ping(address, count = 4).collect { line ->
                     _pingResult.value = _pingResult.value + line + "\n"
                 }
             } catch (e: Exception) {
