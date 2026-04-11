@@ -4,162 +4,57 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
-import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             MaterialTheme {
-                PingApp()
-            }
-        }
-    }
-}
-
-@Composable
-fun PingApp() {
-    val context = LocalContext.current
-    val viewModelStoreOwner = checkNotNull(LocalViewModelStoreOwner.current) {
-        "No ViewModelStoreOwner"
-    }
-    val factory = remember {
-        ViewModelProvider.AndroidViewModelFactory.getInstance(context.applicationContext as android.app.Application)
-    }
-    val viewModel: MainViewModel = ViewModelProvider(viewModelStoreOwner, factory).get(MainViewModel::class.java)
-
-    // 修复：添加了collectAsState()所需的initial初始值参数
-    val entries by viewModel.entries.collectAsState(initial = emptyList())
-    val pingResult by viewModel.pingResult.collectAsState(initial = "")
-    val searchQuery by viewModel.searchQuery.collectAsState(initial = "")
-
-    var quickAddress by remember { mutableStateOf("") }
-    var newName by remember { mutableStateOf("") }
-    var newAddress by remember { mutableStateOf("") }
-
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = "⚡ 快速 Ping",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = quickAddress,
-                    onValueChange = { quickAddress = it },
-                    label = { Text("输入 IP 或域名") },
-                    placeholder = { Text("例如 8.8.8.8 或 baidu.com") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Button(
-                    onClick = { if (quickAddress.isNotBlank()) viewModel.pingAddress(quickAddress) },
-                    modifier = Modifier.align(Alignment.End)
-                ) {
-                    Text("开始 Ping")
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        if (pingResult.isNotBlank()) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
-            ) {
-                Text(
-                    text = pingResult,
-                    modifier = Modifier.padding(16.dp),
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
-            Spacer(modifier = Modifier.height(16.dp))
-        }
-
-        Divider()
-
-        Spacer(modifier = Modifier.height(8.dp))
-        Text("📋 保存常用地址", style = MaterialTheme.typography.titleMedium)
-
-        OutlinedTextField(
-            value = searchQuery,
-            onValueChange = { viewModel.updateSearchQuery(it) },
-            label = { Text("🔍 搜索备注或IP") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        OutlinedTextField(
-            value = newName,
-            onValueChange = { newName = it },
-            label = { Text("备注名称") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        OutlinedTextField(
-            value = newAddress,
-            onValueChange = { newAddress = it },
-            label = { Text("IP 地址或域名") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Button(
-            onClick = {
-                if (newName.isNotBlank() && newAddress.isNotBlank()) {
-                    viewModel.addEntry(newName, newAddress)
-                    newName = ""
-                    newAddress = ""
-                }
-            },
-            modifier = Modifier.align(Alignment.End)
-        ) {
-            Text("保存到列表")
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        LazyColumn(modifier = Modifier.weight(1f)) {
-            items(entries) { entry ->
-                Card(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(16.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(entry.name, style = MaterialTheme.typography.bodyLarge)
-                            Text(entry.address, style = MaterialTheme.typography.bodyMedium)
+                val navController = rememberNavController()
+                Scaffold(
+                    bottomBar = {
+                        NavigationBar {
+                            val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
+                            NavigationBarItem(
+                                selected = currentRoute == Screen.Home.route,
+                                onClick = { navController.navigate(Screen.Home.route) },
+                                icon = { Text("🏠") },
+                                label = { Text("首页") }
+                            )
+                            NavigationBarItem(
+                                selected = currentRoute == Screen.SavedList.route,
+                                onClick = { navController.navigate(Screen.SavedList.route) },
+                                icon = { Text("📋") },
+                                label = { Text("存储") }
+                            )
+                            NavigationBarItem(
+                                selected = currentRoute == Screen.Settings.route,
+                                onClick = { navController.navigate(Screen.Settings.route) },
+                                icon = { Text("⚙️") },
+                                label = { Text("设置") }
+                            )
                         }
-                        Row {
-                            TextButton(onClick = { viewModel.pingAddress(entry.address) }) {
-                                Text("Ping")
-                            }
-                            TextButton(onClick = { viewModel.deleteEntry(entry) }) {
-                                Text("删除", color = MaterialTheme.colorScheme.error)
-                            }
+                    }
+                ) { innerPadding ->
+                    NavHost(
+                        navController = navController,
+                        startDestination = Screen.Home.route,
+                        modifier = Modifier.padding(innerPadding)
+                    ) {
+                        composable(Screen.Home.route) {
+                            HomeScreen()
+                        }
+                        composable(Screen.SavedList.route) {
+                            SavedListScreen()
+                        }
+                        composable(Screen.Settings.route) {
+                            SettingsScreen()
                         }
                     }
                 }
@@ -167,4 +62,3 @@ fun PingApp() {
         }
     }
 }
-
