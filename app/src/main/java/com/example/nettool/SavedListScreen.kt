@@ -13,7 +13,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import org.json.JSONObject
 
@@ -29,9 +31,8 @@ fun SavedListScreen(
     var editingEntry by remember { mutableStateOf<IpEntry?>(null) }
     var showDetailDialog by remember { mutableStateOf<IpEntry?>(null) }
 
+    // 编辑时临时存储的备注项（键值对）
     var remarkItems by remember { mutableStateOf(listOf<Pair<String, String>>()) }
-    var newKey by remember { mutableStateOf("") }
-    var newValue by remember { mutableStateOf("") }
     var mainRemark by remember { mutableStateOf("") }
 
     // 长按菜单状态
@@ -48,9 +49,21 @@ fun SavedListScreen(
         }
         val items = mutableListOf<Pair<String, String>>()
         json.keys().forEach { key ->
-            items.add(key to json.getString(key))
+            items.add(key to json.optString(key, ""))
         }
         remarkItems = items
+    }
+
+    // 从额外备注中提取客户地址
+    fun getCustomerAddress(extraRemarks: String): String {
+        return try {
+            val json = JSONObject(extraRemarks)
+            json.optString("地址", "").ifBlank {
+                json.optString("address", "").ifBlank { "—" }
+            }
+        } catch (e: Exception) {
+            "—"
+        }
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
@@ -73,12 +86,10 @@ fun SavedListScreen(
                         .pointerInput(entry.id) {
                             detectTapGestures(
                                 onTap = {
-                                    // 单击：自动 Ping 并跳转首页
                                     viewModel.triggerAutoPing(entry.address)
                                     onNavigateToHome()
                                 },
                                 onLongPress = {
-                                    // 长按：显示菜单
                                     selectedEntryForMenu = entry
                                     menuExpanded = true
                                 }
@@ -86,28 +97,33 @@ fun SavedListScreen(
                         },
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                 ) {
-                    Row(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(16.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                            .padding(16.dp)
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(entry.name, style = MaterialTheme.typography.bodyLarge)
-                            Text(entry.address, style = MaterialTheme.typography.bodySmall)
-                            val extraCount = try {
-                                JSONObject(entry.extraRemarks).length()
-                            } catch (e: Exception) {
-                                0
-                            }
-                            if (extraCount > 0) {
-                                Text("额外备注: $extraCount 项", style = MaterialTheme.typography.bodySmall)
-                            }
-                        }
+                        // 客户名称（小字体）
+                        Text(
+                            text = entry.name.ifBlank { "未命名" },
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        // IP 地址（大字体）
+                        Text(
+                            text = entry.address,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        // 客户地址（小字体）
+                        Text(
+                            text = "📍 ${getCustomerAddress(entry.extraRemarks)}",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
 
-                    // 长按菜单
                     DropdownMenu(
                         expanded = menuExpanded && selectedEntryForMenu?.id == entry.id,
                         onDismissRequest = { menuExpanded = false }
@@ -159,7 +175,7 @@ fun SavedListScreen(
             title = { Text("地址详情") },
             text = {
                 Column {
-                    Text("主备注: ${entry.name}")
+                    Text("客户名称: ${entry.name}")
                     Text("IP/域名: ${entry.address}")
                     Spacer(modifier = Modifier.height(8.dp))
                     Text("额外备注:", style = MaterialTheme.typography.titleSmall)
@@ -188,23 +204,23 @@ fun SavedListScreen(
         )
     }
 
-    // 编辑对话框（多备注）
+    // 编辑对话框（无标题，字段标签已调整）
     if (editingEntry != null) {
         AlertDialog(
             onDismissRequest = { editingEntry = null },
-            title = { Text("编辑备注") },
+            title = { /* 空白标题 */ },
             text = {
                 Column {
+                    // 客户名称
                     OutlinedTextField(
                         value = mainRemark,
                         onValueChange = { mainRemark = it },
-                        label = { Text("主备注名称") },
+                        label = { Text("客户名称") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text("额外备注", style = MaterialTheme.typography.titleSmall)
-                    Spacer(modifier = Modifier.height(8.dp))
+                    // 备注列表
                     LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
                         itemsIndexed(remarkItems) { index, (key, value) ->
                             Row(
@@ -212,7 +228,29 @@ fun SavedListScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text("$key: $value")
+                                    OutlinedTextField(
+                                        value = key,
+                                        onValueChange = { newKey ->
+                                            remarkItems = remarkItems.toMutableList().apply {
+                                                set(index, newKey to value)
+                                            }
+                                        },
+                                        label = { Text("备注名称") },
+                                        singleLine = true,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    OutlinedTextField(
+                                        value = value,
+                                        onValueChange = { newValue ->
+                                            remarkItems = remarkItems.toMutableList().apply {
+                                                set(index, key to newValue)
+                                            }
+                                        },
+                                        label = { Text("内容") },
+                                        singleLine = true,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
                                 }
                                 IconButton(onClick = {
                                     remarkItems = remarkItems.toMutableList().apply { removeAt(index) }
@@ -223,31 +261,15 @@ fun SavedListScreen(
                         }
                     }
                     Spacer(modifier = Modifier.height(8.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        OutlinedTextField(
-                            value = newKey,
-                            onValueChange = { newKey = it },
-                            label = { Text("键") },
-                            modifier = Modifier.weight(1f),
-                            singleLine = true
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        OutlinedTextField(
-                            value = newValue,
-                            onValueChange = { newValue = it },
-                            label = { Text("值") },
-                            modifier = Modifier.weight(2f),
-                            singleLine = true
-                        )
-                        IconButton(onClick = {
-                            if (newKey.isNotBlank() && newValue.isNotBlank()) {
-                                remarkItems = remarkItems + (newKey to newValue)
-                                newKey = ""
-                                newValue = ""
-                            }
-                        }) {
-                            Icon(Icons.Default.Add, contentDescription = "添加")
+                    // 新增备注按钮
+                    TextButton(
+                        onClick = {
+                            remarkItems = remarkItems + ("" to "")
                         }
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("新增备注")
                     }
                 }
             },
@@ -256,7 +278,9 @@ fun SavedListScreen(
                     editingEntry?.let { entry ->
                         val json = JSONObject()
                         remarkItems.forEach { (k, v) ->
-                            json.put(k, v)
+                            if (k.isNotBlank()) {
+                                json.put(k, v)
+                            }
                         }
                         val updatedEntry = entry.copy(
                             name = mainRemark,
