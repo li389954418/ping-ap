@@ -4,8 +4,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -37,6 +35,15 @@ fun HomeScreen(viewModel: MainViewModel = viewModel()) {
 
     val scope = rememberCoroutineScope()
 
+    // 监听存储页选择的地址
+    val selectedAddress by viewModel.selectedAddress.collectAsState()
+    LaunchedEffect(selectedAddress) {
+        if (selectedAddress.isNotBlank()) {
+            targetAddress = selectedAddress
+            viewModel.setSelectedAddress("")
+        }
+    }
+
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         // 目标地址输入 + 保存按钮
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -47,14 +54,14 @@ fun HomeScreen(viewModel: MainViewModel = viewModel()) {
                 modifier = Modifier.weight(1f),
                 singleLine = true
             )
-            IconButton(
+            TextButton(
                 onClick = {
                     if (targetAddress.isNotBlank()) {
                         viewModel.addEntry(targetAddress, targetAddress)
                     }
                 }
             ) {
-                Icon(Icons.Default.Save, contentDescription = "保存地址")
+                Text("保存")
             }
         }
 
