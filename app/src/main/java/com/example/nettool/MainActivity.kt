@@ -71,6 +71,7 @@ fun PingApp(viewModel: MainViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // Ping 结果展示
         if (pingResult.isNotBlank()) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -87,6 +88,7 @@ fun PingApp(viewModel: MainViewModel = viewModel()) {
 
         Divider()
 
+        // 保存常用地址区域
         Spacer(modifier = Modifier.height(8.dp))
         Text("📋 保存常用地址", style = MaterialTheme.typography.titleMedium)
 
@@ -131,6 +133,7 @@ fun PingApp(viewModel: MainViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // 地址列表
         LazyColumn(modifier = Modifier.weight(1f)) {
             items(entries) { entry ->
                 Card(
