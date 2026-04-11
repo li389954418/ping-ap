@@ -1,4 +1,4 @@
-package com.example.pingapp
+package com.example.nettool
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
