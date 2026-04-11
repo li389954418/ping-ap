@@ -1,25 +1,23 @@
 package com.example.nettool
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import kotlinx.coroutines.delay
 import org.json.JSONObject
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SavedListScreen(
     viewModel: MainViewModel = viewModel(),
@@ -35,6 +33,10 @@ fun SavedListScreen(
     var newKey by remember { mutableStateOf("") }
     var newValue by remember { mutableStateOf("") }
     var mainRemark by remember { mutableStateOf("") }
+
+    // 长按菜单状态
+    var menuExpanded by remember { mutableStateOf(false) }
+    var selectedEntryForMenu by remember { mutableStateOf<IpEntry?>(null) }
 
     fun startEditing(entry: IpEntry) {
         editingEntry = entry
@@ -64,96 +66,83 @@ fun SavedListScreen(
 
         LazyColumn(modifier = Modifier.weight(1f)) {
             items(entries, key = { it.id }) { entry ->
-                val dismissState = rememberDismissState(
-                    confirmStateChange = { dismissValue ->
-                        when (dismissValue) {
-                            DismissValue.DismissedToEnd -> {
-                                startEditing(entry)
-                                false // 不自动移除条目
-                            }
-                            DismissValue.DismissedToStart -> {
-                                viewModel.deleteEntry(entry)
-                                true // 条目会被移除，由数据变化触发UI更新
-                            }
-                            else -> false
-                        }
-                    }
-                )
-
-                SwipeToDismiss(
-                    state = dismissState,
-                    directions = setOf(DismissDirection.EndToStart, DismissDirection.StartToEnd),
-                    background = {
-                        val direction = dismissState.dismissDirection
-                        val color = when (direction) {
-                            DismissDirection.StartToEnd -> Color(0xFF4CAF50)
-                            DismissDirection.EndToStart -> Color(0xFFF44336)
-                            else -> Color.Transparent
-                        }
-                        Box(modifier = Modifier.fillMaxSize().background(color)) {
-                            when (direction) {
-                                DismissDirection.StartToEnd -> {
-                                    Icon(
-                                        Icons.Default.Edit,
-                                        contentDescription = "编辑",
-                                        tint = Color.White,
-                                        modifier = Modifier.align(Alignment.CenterStart).padding(start = 24.dp)
-                                    )
-                                }
-                                DismissDirection.EndToStart -> {
-                                    Icon(
-                                        Icons.Default.Delete,
-                                        contentDescription = "删除",
-                                        tint = Color.White,
-                                        modifier = Modifier.align(Alignment.CenterEnd).padding(end = 24.dp)
-                                    )
-                                }
-                                else -> {}
-                            }
-                        }
-                    },
-                    dismissContent = {
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp)
-                                .clickable {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp)
+                        .pointerInput(entry.id) {
+                            detectTapGestures(
+                                onTap = {
+                                    // 单击：自动 Ping 并跳转首页
                                     viewModel.triggerAutoPing(entry.address)
                                     onNavigateToHome()
                                 },
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(16.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(entry.name, style = MaterialTheme.typography.bodyLarge)
-                                    Text(entry.address, style = MaterialTheme.typography.bodySmall)
-                                    val extraCount = try {
-                                        JSONObject(entry.extraRemarks).length()
-                                    } catch (e: Exception) {
-                                        0
-                                    }
-                                    if (extraCount > 0) {
-                                        Text("额外备注: $extraCount 项", style = MaterialTheme.typography.bodySmall)
-                                    }
+                                onLongPress = {
+                                    // 长按：显示菜单
+                                    selectedEntryForMenu = entry
+                                    menuExpanded = true
                                 }
-                                IconButton(onClick = { showDetailDialog = entry }) {
-                                    Icon(Icons.Default.MoreVert, contentDescription = "详情")
-                                }
+                            )
+                        },
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(entry.name, style = MaterialTheme.typography.bodyLarge)
+                            Text(entry.address, style = MaterialTheme.typography.bodySmall)
+                            val extraCount = try {
+                                JSONObject(entry.extraRemarks).length()
+                            } catch (e: Exception) {
+                                0
+                            }
+                            if (extraCount > 0) {
+                                Text("额外备注: $extraCount 项", style = MaterialTheme.typography.bodySmall)
                             }
                         }
                     }
-                )
+
+                    // 长按菜单
+                    DropdownMenu(
+                        expanded = menuExpanded && selectedEntryForMenu?.id == entry.id,
+                        onDismissRequest = { menuExpanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("编辑") },
+                            onClick = {
+                                menuExpanded = false
+                                startEditing(entry)
+                            },
+                            leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("删除") },
+                            onClick = {
+                                menuExpanded = false
+                                viewModel.deleteEntry(entry)
+                            },
+                            leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("详情") },
+                            onClick = {
+                                menuExpanded = false
+                                showDetailDialog = entry
+                            },
+                            leadingIcon = { Icon(Icons.Default.Info, contentDescription = null) }
+                        )
+                    }
+                }
             }
         }
     }
 
-    // 详情弹窗（同上）
+    // 详情弹窗
     showDetailDialog?.let { entry ->
         val extraJson = try {
             JSONObject(entry.extraRemarks)
