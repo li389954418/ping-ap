@@ -10,13 +10,6 @@ import java.net.Socket
 import kotlin.math.round
 
 object PingNative {
-    data class PingParams(
-        val count: Int = 4,
-        val packetSize: Int = 56,
-        val ttl: Int = 64,
-        val timeout: Int = 2000
-    )
-
     fun ping(
         host: String,
         count: Int = 4,
@@ -65,7 +58,7 @@ object PingNative {
             }
 
             // 检查协程是否被取消
-            coroutineContext.ensureActive()
+            currentCoroutineContext().ensureActive()
 
             // 间隔 1 秒（最后一次不延迟）
             if (count == 0 || sequence < count) {
