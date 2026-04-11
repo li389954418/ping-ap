@@ -1,4 +1,4 @@
-package com.example.pingapp
+package com.example.nettool
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
