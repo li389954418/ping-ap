@@ -52,6 +52,18 @@ fun SavedListScreen(
         remarkItems = items
     }
 
+    // 从额外备注中提取客户地址
+    fun getCustomerAddress(extraRemarks: String): String {
+        return try {
+            val json = JSONObject(extraRemarks)
+            json.optString("地址", "").ifBlank {
+                json.optString("address", "").ifBlank { "—" }
+            }
+        } catch (e: Exception) {
+            "—"
+        }
+    }
+
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         OutlinedTextField(
             value = searchQuery,
@@ -91,16 +103,25 @@ fun SavedListScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
+                            // 客户名称（小字）
                             Text(
                                 text = entry.name.ifBlank { "未命名" },
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Spacer(modifier = Modifier.height(4.dp))
+                            // IP 地址（大字）
                             Text(
                                 text = entry.address,
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.Medium
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            // 客户地址（小字）
+                            Text(
+                                text = "📍 ${getCustomerAddress(entry.extraRemarks)}",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                         IconButton(
@@ -140,7 +161,7 @@ fun SavedListScreen(
         }
     }
 
-    // 详情弹窗（已移除"额外备注:"标题，直接显示内容）
+    // 详情弹窗（已移除"额外备注:"标题，直接显示备注项）
     showDetailDialog?.let { entry ->
         val extraJson = try {
             JSONObject(entry.extraRemarks)
