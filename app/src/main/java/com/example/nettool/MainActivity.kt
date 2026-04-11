@@ -25,7 +25,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun PingApp(viewModel: MainViewModel = viewModel()) {
+fun PingApp(viewModel: MainViewModel = viewModel<MainViewModel>()) {
     val entries by viewModel.entries.collectAsState()
     val pingResult by viewModel.pingResult.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
