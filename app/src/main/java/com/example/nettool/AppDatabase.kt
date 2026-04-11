@@ -1,4 +1,4 @@
-package com.example.pingapp
+package com.example.nettool
 
 import android.content.Context
 import androidx.room.Database
