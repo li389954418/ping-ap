@@ -44,7 +44,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun updateEntry(entry: IpEntry) {
         viewModelScope.launch {
-            db.ipDao().insert(entry) // Room 的 insert 会替换同 ID 记录
+            db.ipDao().update(entry)
         }
     }
 
