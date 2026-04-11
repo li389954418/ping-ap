@@ -36,16 +36,7 @@ object PingNative {
             transmitted++
 
             val startTime = System.nanoTime()
-            val success = try {
-                val socket = Socket()
-                socket.tcpNoDelay = true
-                socket.soTimeout = timeout
-                socket.connect(InetSocketAddress(address, 80), timeout)
-                socket.close()
-                true
-            } catch (e: Exception) {
-                false
-            }
+            val success = isHostReachable(address, timeout)
             val endTime = System.nanoTime()
             val timeMs = (endTime - startTime) / 1_000_000.0
 
@@ -78,4 +69,35 @@ object PingNative {
             emit("rtt min/avg/max = ${round(min)}/${round(avg)}/${round(max)} ms")
         }
     }.flowOn(Dispatchers.IO)
+
+    /**
+     * 检测主机是否可达（兼容性更好）
+     */
+    private suspend fun isHostReachable(address: InetAddress, timeout: Int): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                // 方法1：系统 isReachable（可能发送 ICMP 或 TCP Echo）
+                if (address.isReachable(timeout)) {
+                    return@withContext true
+                }
+                // 方法2：尝试连接常见端口
+                val ports = listOf(443, 80, 53)
+                for (port in ports) {
+                    try {
+                        Socket().use { socket ->
+                            socket.tcpNoDelay = true
+                            socket.soTimeout = timeout
+                            socket.connect(InetSocketAddress(address, port), timeout)
+                        }
+                        return@withContext true
+                    } catch (e: Exception) {
+                        // 继续尝试下一个端口
+                    }
+                }
+                false
+            } catch (e: Exception) {
+                false
+            }
+        }
+    }
 }
