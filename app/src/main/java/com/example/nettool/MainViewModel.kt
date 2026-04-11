@@ -17,23 +17,37 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     val entries = combine(allEntries, _searchQuery) { list, query ->
         if (query.isBlank()) list
-        else list.filter { it.name.contains(query, ignoreCase = true) || it.address.contains(query, ignoreCase = true) }
+        else list.filter {
+            it.name.contains(query, ignoreCase = true) ||
+            it.address.contains(query, ignoreCase = true)
+        }
     }
 
     private val _pingResult = MutableStateFlow("")
     val pingResult: StateFlow<String> = _pingResult
 
-    fun updateSearchQuery(query: String) { _searchQuery.value = query }
+    fun updateSearchQuery(query: String) {
+        _searchQuery.value = query
+    }
+
     fun addEntry(name: String, address: String) {
-        viewModelScope.launch { db.ipDao().insert(IpEntry(name = name, address = address)) }
+        viewModelScope.launch {
+            db.ipDao().insert(IpEntry(name = name, address = address))
+        }
     }
+
     fun deleteEntry(entry: IpEntry) {
-        viewModelScope.launch { db.ipDao().delete(entry) }
+        viewModelScope.launch {
+            db.ipDao().delete(entry)
+        }
     }
+
     fun pingAddress(address: String) {
         viewModelScope.launch {
-            _pingResult.value = "正在 Ping $address ..."
-            _pingResult.value = PingUtil.ping(address)
+            _pingResult.value = "正在 Ping $address ...\n"
+            PingUtil.pingWithFlow(address).collect { line ->
+                _pingResult.value = _pingResult.value + line + "\n"
+            }
         }
     }
 }
