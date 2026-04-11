@@ -29,7 +29,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _selectedAddress = MutableStateFlow("")
     val selectedAddress: StateFlow<String> = _selectedAddress
 
-    // 新增：触发自动开始 Ping 的状态
     private val _autoPingAddress = MutableStateFlow("")
     val autoPingAddress: StateFlow<String> = _autoPingAddress
 
@@ -37,9 +36,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _searchQuery.value = query
     }
 
-    fun addEntry(name: String, address: String) {
+    fun addEntry(name: String, address: String, extraRemarks: String = "{}") {
         viewModelScope.launch {
-            db.ipDao().insert(IpEntry(name = name, address = address))
+            db.ipDao().insert(IpEntry(name = name, address = address, extraRemarks = extraRemarks))
+        }
+    }
+
+    fun updateEntry(entry: IpEntry) {
+        viewModelScope.launch {
+            db.ipDao().insert(entry) // Room 的 insert 会替换同 ID 记录
         }
     }
 
@@ -66,13 +71,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _selectedAddress.value = address
     }
 
-    // 触发自动 Ping（由存储页调用）
     fun triggerAutoPing(address: String) {
         _autoPingAddress.value = address
-        _selectedAddress.value = address // 同时填充到输入框
+        _selectedAddress.value = address
     }
 
-    // 消费自动 Ping 信号（由 HomeScreen 调用后清空）
     fun clearAutoPing() {
         _autoPingAddress.value = ""
     }
