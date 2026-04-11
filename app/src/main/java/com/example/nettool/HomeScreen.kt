@@ -106,28 +106,31 @@ fun HomeScreen() {
                         outputLines = emptyList()
                         isRunning = true
                         scope.launch {
-                            when (activeFunction) {
-                                FunctionType.PING -> {
-                                    PingUtil.pingWithFlow(
-                                        address = targetAddress,
-                                        params = PingUtil.PingParams(
+                            try {
+                                when (activeFunction) {
+                                    FunctionType.PING -> {
+                                        PingNative.ping(
+                                            host = targetAddress,
                                             count = pingCount.toIntOrNull() ?: 4,
                                             packetSize = pingSize.toIntOrNull() ?: 56
-                                        )
-                                    ).collect { line ->
-                                        outputLines = outputLines + line
+                                        ).collect { line ->
+                                            outputLines = outputLines + line
+                                        }
+                                    }
+                                    FunctionType.TRACEROUTE -> {
+                                        TracerouteNative.trace(
+                                            host = targetAddress,
+                                            maxHops = maxHops.toIntOrNull() ?: 30
+                                        ).collect { line ->
+                                            outputLines = outputLines + line
+                                        }
                                     }
                                 }
-                                FunctionType.TRACEROUTE -> {
-                                    TracerouteUtil.traceroute(
-                                        host = targetAddress,
-                                        maxHops = maxHops.toIntOrNull() ?: 30
-                                    ).collect { line ->
-                                        outputLines = outputLines + line
-                                    }
-                                }
+                            } catch (e: Exception) {
+                                outputLines = outputLines + "发生错误: ${e.message}"
+                            } finally {
+                                isRunning = false
                             }
-                            isRunning = false
                         }
                     },
                     enabled = targetAddress.isNotBlank() && !isRunning
