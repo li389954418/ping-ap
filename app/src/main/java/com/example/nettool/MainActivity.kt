@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -18,6 +19,11 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme {
                 val navController = rememberNavController()
+                val viewModel: MainViewModel = viewModel()
+
+                // 用于接收存储页回传的地址
+                var selectedAddress by remember { mutableStateOf<String?>(null) }
+
                 Scaffold(
                     bottomBar = {
                         NavigationBar {
@@ -49,10 +55,17 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.padding(innerPadding)
                     ) {
                         composable(Screen.Home.route) {
-                            HomeScreen()
+                            HomeScreen(viewModel = viewModel)
                         }
                         composable(Screen.SavedList.route) {
-                            SavedListScreen()
+                            SavedListScreen(
+                                viewModel = viewModel,
+                                onItemClick = { address ->
+                                    // 将选中的地址传递给 HomeScreen，这里通过导航返回并携带参数
+                                    navController.previousBackStackEntry?.savedStateHandle?.set("address", address)
+                                    navController.popBackStack()
+                                }
+                            )
                         }
                         composable(Screen.Settings.route) {
                             SettingsScreen()
