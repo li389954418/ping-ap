@@ -35,7 +35,6 @@ fun PingApp(viewModel: MainViewModel = viewModel()) {
     var newAddress by remember { mutableStateOf("") }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        // 快速 Ping 卡片
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
@@ -50,28 +49,23 @@ fun PingApp(viewModel: MainViewModel = viewModel()) {
                 OutlinedTextField(
                     value = quickAddress,
                     onValueChange = { quickAddress = it },
-                    label = { Text("输入 IP 或域名") },
-                    placeholder = { Text("例如 8.8.8.8 或 baidu.com") },
+                    label = { Text(text = "输入 IP 或域名") },
+                    placeholder = { Text(text = "例如 8.8.8.8 或 baidu.com") },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Button(
-                    onClick = {
-                        if (quickAddress.isNotBlank()) {
-                            viewModel.pingAddress(quickAddress)
-                        }
-                    },
+                    onClick = { if (quickAddress.isNotBlank()) viewModel.pingAddress(quickAddress) },
                     modifier = Modifier.align(Alignment.End)
                 ) {
-                    Text("开始 Ping")
+                    Text(text = "开始 Ping")
                 }
             }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Ping 结果显示
         if (pingResult.isNotBlank()) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -88,14 +82,13 @@ fun PingApp(viewModel: MainViewModel = viewModel()) {
 
         Divider()
 
-        // 保存常用地址
         Spacer(modifier = Modifier.height(8.dp))
-        Text("📋 保存常用地址", style = MaterialTheme.typography.titleMedium)
+        Text(text = "📋 保存常用地址", style = MaterialTheme.typography.titleMedium)
 
         OutlinedTextField(
             value = searchQuery,
             onValueChange = { viewModel.updateSearchQuery(it) },
-            label = { Text("🔍 搜索备注或IP") },
+            label = { Text(text = "🔍 搜索备注或IP") },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true
         )
@@ -105,7 +98,7 @@ fun PingApp(viewModel: MainViewModel = viewModel()) {
         OutlinedTextField(
             value = newName,
             onValueChange = { newName = it },
-            label = { Text("备注名称") },
+            label = { Text(text = "备注名称") },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true
         )
@@ -113,7 +106,7 @@ fun PingApp(viewModel: MainViewModel = viewModel()) {
         OutlinedTextField(
             value = newAddress,
             onValueChange = { newAddress = it },
-            label = { Text("IP 地址或域名") },
+            label = { Text(text = "IP 地址或域名") },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true
         )
@@ -128,12 +121,11 @@ fun PingApp(viewModel: MainViewModel = viewModel()) {
             },
             modifier = Modifier.align(Alignment.End)
         ) {
-            Text("保存到列表")
+            Text(text = "保存到列表")
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // 地址列表
         LazyColumn(modifier = Modifier.weight(1f)) {
             items(entries) { entry ->
                 Card(
@@ -146,15 +138,15 @@ fun PingApp(viewModel: MainViewModel = viewModel()) {
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(entry.name, style = MaterialTheme.typography.bodyLarge)
-                            Text(entry.address, style = MaterialTheme.typography.bodyMedium)
+                            Text(text = entry.name, style = MaterialTheme.typography.bodyLarge)
+                            Text(text = entry.address, style = MaterialTheme.typography.bodyMedium)
                         }
                         Row {
                             TextButton(onClick = { viewModel.pingAddress(entry.address) }) {
-                                Text("Ping")
+                                Text(text = "Ping")
                             }
                             TextButton(onClick = { viewModel.deleteEntry(entry) }) {
-                                Text("删除", color = MaterialTheme.colorScheme.error)
+                                Text(text = "删除", color = MaterialTheme.colorScheme.error)
                             }
                         }
                     }
