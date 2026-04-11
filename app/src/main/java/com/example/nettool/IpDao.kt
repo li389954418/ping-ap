@@ -1,4 +1,4 @@
-package com.example.pingapp
+package com.example.nettool
 
 import androidx.room.Dao
 import androidx.room.Delete
