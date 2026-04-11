@@ -1,6 +1,5 @@
 package com.example.nettool
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -33,6 +32,7 @@ fun SavedListScreen(
 
     var remarkItems by remember { mutableStateOf(listOf<Pair<String, String>>()) }
     var mainRemark by remember { mutableStateOf("") }
+    var customerAddress by remember { mutableStateOf("") }
 
     var menuExpanded by remember { mutableStateOf(false) }
     var selectedEntryForMenu by remember { mutableStateOf<IpEntry?>(null) }
@@ -45,14 +45,21 @@ fun SavedListScreen(
         } catch (e: Exception) {
             JSONObject()
         }
+        // 提取客户地址
+        customerAddress = json.optString("地址", "").ifBlank {
+            json.optString("address", "")
+        }
+        // 提取除地址外的其他备注项
         val items = mutableListOf<Pair<String, String>>()
         json.keys().forEach { key ->
-            items.add(key to json.optString(key, ""))
+            if (key != "地址" && key != "address") {
+                items.add(key to json.optString(key, ""))
+            }
         }
         remarkItems = items
     }
 
-    // 从额外备注中提取客户地址
+    // 从额外备注中提取客户地址（用于卡片显示）
     fun getCustomerAddress(extraRemarks: String): String {
         return try {
             val json = JSONObject(extraRemarks)
@@ -103,27 +110,25 @@ fun SavedListScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            // 客户名称（小字）
                             Text(
                                 text = entry.name.ifBlank { "未命名" },
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Spacer(modifier = Modifier.height(4.dp))
-                            // IP 地址（大字）
                             Text(
                                 text = entry.address,
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.Medium
                             )
                             Spacer(modifier = Modifier.height(4.dp))
-                            // 客户地址（小字）
                             Text(
                                 text = "📍 ${getCustomerAddress(entry.extraRemarks)}",
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
+                        // 放大镜图标：查看详情（无标题弹窗）
                         IconButton(
                             onClick = { showDetailDialog = entry }
                         ) {
@@ -148,12 +153,12 @@ fun SavedListScreen(
                             leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) }
                         )
                         DropdownMenuItem(
-                            text = { Text("详情") },
+                            text = { Text("编辑") },
                             onClick = {
                                 menuExpanded = false
-                                showDetailDialog = entry
+                                startEditing(entry)
                             },
-                            leadingIcon = { Icon(Icons.Default.Info, contentDescription = null) }
+                            leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }
                         )
                     }
                 }
@@ -161,7 +166,7 @@ fun SavedListScreen(
         }
     }
 
-    // 详情弹窗（已移除"额外备注:"标题，直接显示备注项）
+    // 详情弹窗（无标题，仅内容）
     showDetailDialog?.let { entry ->
         val extraJson = try {
             JSONObject(entry.extraRemarks)
@@ -175,7 +180,7 @@ fun SavedListScreen(
 
         AlertDialog(
             onDismissRequest = { showDetailDialog = null },
-            title = { Text("地址详情") },
+            title = { /* 无标题 */ },
             text = {
                 Column {
                     Text("客户名称: ${entry.name}")
@@ -189,22 +194,15 @@ fun SavedListScreen(
                 }
             },
             confirmButton = {
-                TextButton(onClick = {
-                    startEditing(entry)
-                    showDetailDialog = null
-                }) {
-                    Text("编辑")
-                }
-            },
-            dismissButton = {
                 TextButton(onClick = { showDetailDialog = null }) {
                     Text("关闭")
                 }
-            }
+            },
+            dismissButton = null  // 不需要取消按钮
         )
     }
 
-    // 编辑对话框
+    // 编辑对话框（增加客户地址字段）
     if (editingEntry != null) {
         AlertDialog(
             onDismissRequest = { editingEntry = null },
@@ -215,6 +213,14 @@ fun SavedListScreen(
                         value = mainRemark,
                         onValueChange = { mainRemark = it },
                         label = { Text("客户名称") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = customerAddress,
+                        onValueChange = { customerAddress = it },
+                        label = { Text("客户地址") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -274,6 +280,11 @@ fun SavedListScreen(
                 TextButton(onClick = {
                     editingEntry?.let { entry ->
                         val json = JSONObject()
+                        // 保存客户地址
+                        if (customerAddress.isNotBlank()) {
+                            json.put("地址", customerAddress)
+                        }
+                        // 保存其他备注项
                         remarkItems.forEach { (k, v) ->
                             if (k.isNotBlank()) {
                                 json.put(k, v)
