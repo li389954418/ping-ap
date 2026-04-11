@@ -16,7 +16,7 @@ object IcmpPing {
     ): Flow<String> = flow {
         val command = listOf(
             "ping",
-            "-c", if (count == 0) "0" else count.toString(), // 0 表示无限
+            "-c", if (count == 0) "0" else count.toString(),
             "-s", packetSize.toString(),
             "-W", (timeout / 1000).toString(),
             host
@@ -27,18 +27,15 @@ object IcmpPing {
             val reader = BufferedReader(InputStreamReader(process.inputStream))
             val errorReader = BufferedReader(InputStreamReader(process.errorStream))
 
-            // 启动一个协程来检查取消状态并销毁进程
-            val job = coroutineContext[Job]
-            if (job != null) {
-                job.invokeOnCompletion {
-                    process.destroy()
-                }
+            // 获取当前协程的 Job，以便取消时销毁进程
+            val job = currentCoroutineContext()[Job]
+            job?.invokeOnCompletion {
+                process.destroy()
             }
 
             var line: String?
             while (reader.readLine().also { line = it } != null) {
                 emit(line ?: "")
-                // 检查协程是否被取消
                 currentCoroutineContext().ensureActive()
             }
             while (errorReader.readLine().also { line = it } != null) {
