@@ -16,8 +16,9 @@ import kotlinx.coroutines.*
 fun HomeScreen() {
     // Ping 参数
     var targetAddress by remember { mutableStateOf("") }
-    var pingCount by remember { mutableStateOf("0") }
+    var pingCount by remember { mutableStateOf("0") }      // 默认长 Ping
     var pingSize by remember { mutableStateOf("56") }
+    var pingPort by remember { mutableStateOf("80") }     // 新增端口
 
     // 输出结果
     var outputLines by remember { mutableStateOf(listOf<String>()) }
@@ -38,20 +39,28 @@ fun HomeScreen() {
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // Ping 参数：次数 + 包大小
+        // Ping 参数：次数 + 包大小 + 端口
         Row(modifier = Modifier.fillMaxWidth()) {
             OutlinedTextField(
                 value = pingCount,
                 onValueChange = { pingCount = it },
-                label = { Text("次数 (0=长Ping)") },
+                label = { Text("次数 (0=长)") },
                 modifier = Modifier.weight(1f),
                 singleLine = true
             )
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(4.dp))
             OutlinedTextField(
                 value = pingSize,
                 onValueChange = { pingSize = it },
-                label = { Text("包大小 (字节)") },
+                label = { Text("包大小") },
+                modifier = Modifier.weight(1f),
+                singleLine = true
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            OutlinedTextField(
+                value = pingPort,
+                onValueChange = { pingPort = it },
+                label = { Text("端口") },
                 modifier = Modifier.weight(1f),
                 singleLine = true
             )
@@ -64,24 +73,23 @@ fun HomeScreen() {
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
-            // 开始 / 停止按钮
             Button(
                 onClick = {
                     if (isRunning) {
-                        // 停止：取消协程
                         pingJob?.cancel()
                         isRunning = false
                         outputLines = outputLines + "\n--- 已停止 ---"
                     } else {
-                        // 开始
                         outputLines = emptyList()
                         isRunning = true
                         pingJob = scope.launch {
                             try {
                                 PingNative.ping(
                                     host = targetAddress,
-                                    count = pingCount.toIntOrNull() ?: 4,
-                                    packetSize = pingSize.toIntOrNull() ?: 56
+                                    count = pingCount.toIntOrNull() ?: 0,
+                                    packetSize = pingSize.toIntOrNull() ?: 56,
+                                    port = pingPort.toIntOrNull() ?: 80,
+                                    timeout = 2000
                                 ).collect { line ->
                                     outputLines = outputLines + line
                                 }
@@ -102,7 +110,6 @@ fun HomeScreen() {
                 Text(if (isRunning) "停止" else "开始")
             }
 
-            // 清空按钮
             Button(
                 onClick = { outputLines = emptyList() },
                 enabled = outputLines.isNotEmpty() && !isRunning,
@@ -116,7 +123,7 @@ fun HomeScreen() {
 
         // 结果显示区域
         Text(
-            text = "📡 Ping 结果",
+            text = "📡 Ping 结果 (TCP 端口 ${pingPort.ifBlank { "80" }})",
             style = MaterialTheme.typography.titleSmall
         )
         Spacer(modifier = Modifier.height(4.dp))
