@@ -35,7 +35,7 @@ fun PingApp(viewModel: MainViewModel = viewModel()) {
     var newAddress by remember { mutableStateOf("") }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        // 快速 Ping 区域
+        // 快速 Ping 卡片
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
@@ -71,7 +71,7 @@ fun PingApp(viewModel: MainViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Ping 结果展示
+        // Ping 结果显示
         if (pingResult.isNotBlank()) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -88,7 +88,7 @@ fun PingApp(viewModel: MainViewModel = viewModel()) {
 
         Divider()
 
-        // 保存常用地址区域
+        // 保存常用地址
         Spacer(modifier = Modifier.height(8.dp))
         Text("📋 保存常用地址", style = MaterialTheme.typography.titleMedium)
 
