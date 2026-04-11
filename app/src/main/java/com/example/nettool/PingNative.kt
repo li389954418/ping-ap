@@ -14,7 +14,7 @@ object PingNative {
         host: String,
         count: Int = 4,
         packetSize: Int = 56,
-        ttl: Int = 64,
+        port: Int = 80,
         timeout: Int = 2000
     ): Flow<String> = flow {
         val address = try {
@@ -24,7 +24,7 @@ object PingNative {
             return@flow
         }
 
-        emit("PING $host (${address.hostAddress}) ${packetSize}(${packetSize + 8}) bytes of data.")
+        emit("TCPING $host (${address.hostAddress}) port=$port, timeout=${timeout}ms")
 
         var sequence = 0
         var transmitted = 0
@@ -36,68 +36,47 @@ object PingNative {
             transmitted++
 
             val startTime = System.nanoTime()
-            val success = isHostReachable(address, timeout)
+            val success = tcpConnect(address, port, timeout)
             val endTime = System.nanoTime()
             val timeMs = (endTime - startTime) / 1_000_000.0
 
             if (success) {
                 received++
                 times.add(timeMs)
-                emit("64 bytes from ${address.hostAddress}: icmp_seq=$sequence ttl=$ttl time=${round(timeMs).toInt()} ms")
+                emit("Connected to ${address.hostAddress}:$port seq=$sequence time=${round(timeMs).toInt()} ms")
             } else {
-                emit("Request timeout for icmp_seq $sequence")
+                emit("Connection timeout for seq=$sequence")
             }
 
-            // 检查协程是否被取消
             currentCoroutineContext().ensureActive()
 
-            // 间隔 1 秒（最后一次不延迟）
             if (count == 0 || sequence < count) {
                 delay(1000)
             }
         }
 
-        // 统计摘要
         val loss = if (transmitted > 0) (transmitted - received) * 100.0 / transmitted else 0.0
         val min = times.minOrNull() ?: 0.0
         val max = times.maxOrNull() ?: 0.0
         val avg = times.average().takeUnless { it.isNaN() } ?: 0.0
 
-        emit("--- $host ping statistics ---")
-        emit("$transmitted packets transmitted, $received received, ${round(loss)}% packet loss")
+        emit("--- $host:$port tcping statistics ---")
+        emit("$transmitted probes transmitted, $received received, ${round(loss)}% loss")
         if (received > 0) {
             emit("rtt min/avg/max = ${round(min)}/${round(avg)}/${round(max)} ms")
         }
     }.flowOn(Dispatchers.IO)
 
-    /**
-     * 检测主机是否可达（兼容性更好）
-     */
-    private suspend fun isHostReachable(address: InetAddress, timeout: Int): Boolean {
-        return withContext(Dispatchers.IO) {
-            try {
-                // 方法1：系统 isReachable（可能发送 ICMP 或 TCP Echo）
-                if (address.isReachable(timeout)) {
-                    return@withContext true
-                }
-                // 方法2：尝试连接常见端口
-                val ports = listOf(443, 80, 53)
-                for (port in ports) {
-                    try {
-                        Socket().use { socket ->
-                            socket.tcpNoDelay = true
-                            socket.soTimeout = timeout
-                            socket.connect(InetSocketAddress(address, port), timeout)
-                        }
-                        return@withContext true
-                    } catch (e: Exception) {
-                        // 继续尝试下一个端口
-                    }
-                }
-                false
-            } catch (e: Exception) {
-                false
+    private fun tcpConnect(address: InetAddress, port: Int, timeout: Int): Boolean {
+        return try {
+            Socket().use { socket ->
+                socket.tcpNoDelay = true
+                socket.soTimeout = timeout
+                socket.connect(InetSocketAddress(address, port), timeout)
             }
+            true
+        } catch (e: Exception) {
+            false
         }
     }
 }
