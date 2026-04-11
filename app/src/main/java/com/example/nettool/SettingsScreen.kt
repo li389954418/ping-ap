@@ -1,23 +1,25 @@
 package com.example.nettool
 
 import android.content.Context
-import android.content.Intent
-import android.net.Uri
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.core.content.FileProvider
-import java.io.File
+import androidx.navigation.NavController
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen() {
+fun SettingsScreen(
+    navController: NavController? = null
+) {
     val context = LocalContext.current
     val versionName = remember { getVersionName(context) }
 
@@ -27,6 +29,26 @@ fun SettingsScreen() {
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Text("⚙️ 设置", style = MaterialTheme.typography.headlineSmall)
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // 识别模板管理入口
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { navController?.navigate("template_management") }
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("📝 识别模板管理")
+                Icon(Icons.Default.ChevronRight, contentDescription = null)
+            }
+        }
+
         Spacer(modifier = Modifier.height(16.dp))
 
         // 关于卡片
@@ -71,7 +93,6 @@ fun SettingsScreen() {
         }
     }
 
-    // 日志内容弹窗
     if (showLogDialog) {
         AlertDialog(
             onDismissRequest = { showLogDialog = false },
