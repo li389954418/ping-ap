@@ -14,11 +14,18 @@ import kotlinx.coroutines.*
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen() {
-    // Ping 参数
+    // 协议选择
+    var useICMP by remember { mutableStateOf(true) }  // 默认 ICMP
+
+    // 通用参数
     var targetAddress by remember { mutableStateOf("") }
-    var pingCount by remember { mutableStateOf("0") }      // 默认长 Ping
+    var pingCount by remember { mutableStateOf("0") }
+
+    // ICMP 参数
     var pingSize by remember { mutableStateOf("56") }
-    var pingPort by remember { mutableStateOf("80") }     // 新增端口
+
+    // TCP 参数
+    var pingPort by remember { mutableStateOf("80") }
 
     // 输出结果
     var outputLines by remember { mutableStateOf(listOf<String>()) }
@@ -37,38 +44,70 @@ fun HomeScreen() {
             singleLine = true
         )
 
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // 协议切换
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center
+        ) {
+            FilterChip(
+                selected = useICMP,
+                onClick = { useICMP = true },
+                label = { Text("ICMP (系统)") }
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            FilterChip(
+                selected = !useICMP,
+                onClick = { useICMP = false },
+                label = { Text("TCP (端口)") }
+            )
+        }
+
         Spacer(modifier = Modifier.height(12.dp))
 
-        // Ping 参数：次数 + 包大小 + 端口
-        Row(modifier = Modifier.fillMaxWidth()) {
-            OutlinedTextField(
-                value = pingCount,
-                onValueChange = { pingCount = it },
-                label = { Text("次数 (0=长)") },
-                modifier = Modifier.weight(1f),
-                singleLine = true
-            )
-            Spacer(modifier = Modifier.width(4.dp))
-            OutlinedTextField(
-                value = pingSize,
-                onValueChange = { pingSize = it },
-                label = { Text("包大小") },
-                modifier = Modifier.weight(1f),
-                singleLine = true
-            )
-            Spacer(modifier = Modifier.width(4.dp))
-            OutlinedTextField(
-                value = pingPort,
-                onValueChange = { pingPort = it },
-                label = { Text("端口") },
-                modifier = Modifier.weight(1f),
-                singleLine = true
-            )
+        // 参数区域（根据协议变化）
+        if (useICMP) {
+            Row(modifier = Modifier.fillMaxWidth()) {
+                OutlinedTextField(
+                    value = pingCount,
+                    onValueChange = { pingCount = it },
+                    label = { Text("次数 (0=长)") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                OutlinedTextField(
+                    value = pingSize,
+                    onValueChange = { pingSize = it },
+                    label = { Text("包大小") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true
+                )
+            }
+        } else {
+            Row(modifier = Modifier.fillMaxWidth()) {
+                OutlinedTextField(
+                    value = pingCount,
+                    onValueChange = { pingCount = it },
+                    label = { Text("次数 (0=长)") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                OutlinedTextField(
+                    value = pingPort,
+                    onValueChange = { pingPort = it },
+                    label = { Text("端口") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // 操作按钮：开始/停止 + 清空
+        // 操作按钮
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceEvenly
@@ -84,13 +123,20 @@ fun HomeScreen() {
                         isRunning = true
                         pingJob = scope.launch {
                             try {
-                                PingNative.ping(
-                                    host = targetAddress,
-                                    count = pingCount.toIntOrNull() ?: 0,
-                                    packetSize = pingSize.toIntOrNull() ?: 56,
-                                    port = pingPort.toIntOrNull() ?: 80,
-                                    timeout = 2000
-                                ).collect { line ->
+                                val flow = if (useICMP) {
+                                    IcmpPing.ping(
+                                        host = targetAddress,
+                                        count = pingCount.toIntOrNull() ?: 0,
+                                        packetSize = pingSize.toIntOrNull() ?: 56
+                                    )
+                                } else {
+                                    TcpPing.ping(
+                                        host = targetAddress,
+                                        count = pingCount.toIntOrNull() ?: 0,
+                                        port = pingPort.toIntOrNull() ?: 80
+                                    )
+                                }
+                                flow.collect { line ->
                                     outputLines = outputLines + line
                                 }
                             } catch (e: CancellationException) {
@@ -121,9 +167,9 @@ fun HomeScreen() {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // 结果显示区域
+        // 结果标题
         Text(
-            text = "📡 Ping 结果 (TCP 端口 ${pingPort.ifBlank { "80" }})",
+            text = if (useICMP) "📡 ICMP Ping 结果" else "🔌 TCP Ping 结果 (端口 ${pingPort.ifBlank { "80" }})",
             style = MaterialTheme.typography.titleSmall
         )
         Spacer(modifier = Modifier.height(4.dp))
