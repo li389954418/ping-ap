@@ -1,6 +1,6 @@
 package com.example.nettool
 
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
@@ -10,22 +10,11 @@ import java.net.Socket
 import kotlin.math.round
 
 object PingNative {
-    data class PingResult(
-        val address: InetAddress,
-        val sequence: Int,
-        val ttl: Int,
-        val time: Double,      // 毫秒
-        val received: Boolean
-    )
-
-    data class PingSummary(
-        val address: InetAddress,
-        val transmitted: Int,
-        val received: Int,
-        val lossPercent: Double,
-        val minTime: Double,
-        val avgTime: Double,
-        val maxTime: Double
+    data class PingParams(
+        val count: Int = 4,
+        val packetSize: Int = 56,
+        val ttl: Int = 64,
+        val timeout: Int = 2000
     )
 
     fun ping(
@@ -44,15 +33,17 @@ object PingNative {
 
         emit("PING $host (${address.hostAddress}) ${packetSize}(${packetSize + 8}) bytes of data.")
 
-        val results = mutableListOf<PingResult>()
         var sequence = 0
+        var transmitted = 0
+        var received = 0
+        val times = mutableListOf<Double>()
 
-        repeat(count) {
+        while (count == 0 || sequence < count) {
             sequence++
+            transmitted++
+
             val startTime = System.nanoTime()
-            val received = try {
-                // 尝试 TCP 连接 7 号端口 (echo) 或 80 端口模拟连通性
-                // 注意：Android 不支持原始 ICMP 套接字，我们使用 TCP 连接测延迟
+            val success = try {
                 val socket = Socket()
                 socket.tcpNoDelay = true
                 socket.soTimeout = timeout
@@ -65,31 +56,32 @@ object PingNative {
             val endTime = System.nanoTime()
             val timeMs = (endTime - startTime) / 1_000_000.0
 
-            if (received) {
+            if (success) {
+                received++
+                times.add(timeMs)
                 emit("64 bytes from ${address.hostAddress}: icmp_seq=$sequence ttl=$ttl time=${round(timeMs).toInt()} ms")
-                results.add(PingResult(address, sequence, ttl, timeMs, true))
             } else {
                 emit("Request timeout for icmp_seq $sequence")
-                results.add(PingResult(address, sequence, 0, 0.0, false))
             }
 
-            if (it < count - 1) {
-                Thread.sleep(1000)
+            // 检查协程是否被取消
+            coroutineContext.ensureActive()
+
+            // 间隔 1 秒（最后一次不延迟）
+            if (count == 0 || sequence < count) {
+                delay(1000)
             }
         }
 
         // 统计摘要
-        val receivedCount = results.count { it.received }
-        val transmitted = results.size
-        val loss = (transmitted - receivedCount) * 100.0 / transmitted
-        val times = results.filter { it.received }.map { it.time }
+        val loss = if (transmitted > 0) (transmitted - received) * 100.0 / transmitted else 0.0
         val min = times.minOrNull() ?: 0.0
         val max = times.maxOrNull() ?: 0.0
         val avg = times.average().takeUnless { it.isNaN() } ?: 0.0
 
         emit("--- $host ping statistics ---")
-        emit("$transmitted packets transmitted, $receivedCount received, ${round(loss)}% packet loss")
-        if (receivedCount > 0) {
+        emit("$transmitted packets transmitted, $received received, ${round(loss)}% packet loss")
+        if (received > 0) {
             emit("rtt min/avg/max = ${round(min)}/${round(avg)}/${round(max)} ms")
         }
     }.flowOn(Dispatchers.IO)
