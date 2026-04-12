@@ -121,7 +121,8 @@ fun TemplateEditDialog(
 
     // 分词结果
     var words by remember { mutableStateOf(listOf<String>()) }
-    var selectedWords by remember { mutableStateOf(setOf<String>()) }
+    // 使用 Map 记录每个词的选中状态
+    var selectedStates by remember { mutableStateOf(mapOf<String, Boolean>()) }
 
     // 规则项
     data class RuleItem(val keyword: String, var targetField: String)
@@ -132,7 +133,7 @@ fun TemplateEditDialog(
         initialTemplate?.let { template ->
             templateName = template.name
             val rulesList = mutableListOf<RuleItem>()
-            val wordsSet = mutableSetOf<String>()
+            val stateMap = mutableMapOf<String, Boolean>()
             try {
                 val jsonArray = JSONArray(template.rulesJson)
                 for (i in 0 until jsonArray.length()) {
@@ -140,11 +141,11 @@ fun TemplateEditDialog(
                     val keyword = obj.getString("keyword")
                     val targetField = obj.getString("targetField")
                     rulesList.add(RuleItem(keyword, targetField))
-                    wordsSet.add(keyword)
+                    stateMap[keyword] = true
                 }
             } catch (_: Exception) { }
             rules = rulesList
-            selectedWords = wordsSet
+            selectedStates = stateMap
             step = 2
         }
     }
@@ -178,38 +179,44 @@ fun TemplateEditDialog(
                             words = documentText.split(delimiters)
                                 .filter { it.length >= 2 }
                                 .distinct()
+                            // 初始化所有词为未选中
+                            selectedStates = words.associateWith { false }.toMutableMap()
                             step = 2
                         },
                         enabled = templateName.isNotBlank() && documentText.isNotBlank()
                     ) {
-                        Text("下一步：选择关键词")
+                        Text("下一步：滑动选词")
                     }
                 } else {
-                    Text("选择关键词并指定字段", style = MaterialTheme.typography.titleSmall)
+                    Text("滑动开关选择关键词", style = MaterialTheme.typography.titleSmall)
                     Spacer(modifier = Modifier.height(8.dp))
 
                     if (words.isNotEmpty() && initialTemplate == null) {
-                        LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
+                        LazyColumn(modifier = Modifier.heightIn(max = 250.dp)) {
                             items(words) { word ->
                                 Row(
-                                    modifier = Modifier.fillMaxWidth(),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 4.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Checkbox(
-                                        checked = selectedWords.contains(word),
+                                    Text(word, modifier = Modifier.weight(1f))
+                                    Switch(
+                                        checked = selectedStates[word] ?: false,
                                         onCheckedChange = { checked ->
+                                            selectedStates = selectedStates.toMutableMap().apply {
+                                                put(word, checked)
+                                            }
                                             if (checked) {
-                                                selectedWords = selectedWords + word
                                                 if (rules.none { it.keyword == word }) {
                                                     rules = rules + RuleItem(word, "")
                                                 }
                                             } else {
-                                                selectedWords = selectedWords - word
                                                 rules = rules.filter { it.keyword != word }
                                             }
                                         }
                                     )
-                                    Text(word, modifier = Modifier.weight(1f))
                                 }
                             }
                         }
@@ -242,27 +249,26 @@ fun TemplateEditDialog(
                     Spacer(modifier = Modifier.height(8.dp))
 
                     // 为选中的词汇配置字段（新增时）
-                    if (initialTemplate == null && selectedWords.isNotEmpty()) {
+                    if (initialTemplate == null && selectedStates.any { it.value }) {
                         Text("为选中的关键词指定目标字段：")
-                        rules.forEachIndexed { index, rule ->
-                            if (rule.targetField.isBlank()) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(rule.keyword, modifier = Modifier.weight(1f))
-                                    OutlinedTextField(
-                                        value = rule.targetField,
-                                        onValueChange = { newField ->
-                                            rules = rules.toMutableList().apply {
-                                                set(index, rule.copy(targetField = newField))
-                                            }
-                                        },
-                                        label = { Text("字段 (如 remark_设备)") },
-                                        modifier = Modifier.weight(2f),
-                                        singleLine = true
-                                    )
-                                }
+                        rules.filter { it.targetField.isBlank() }.forEachIndexed { _, rule ->
+                            val index = rules.indexOfFirst { it.keyword == rule.keyword }
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(rule.keyword, modifier = Modifier.weight(1f))
+                                OutlinedTextField(
+                                    value = rule.targetField,
+                                    onValueChange = { newField ->
+                                        rules = rules.toMutableList().apply {
+                                            set(index, rule.copy(targetField = newField))
+                                        }
+                                    },
+                                    label = { Text("字段 (如 remark_设备)") },
+                                    modifier = Modifier.weight(2f),
+                                    singleLine = true
+                                )
                             }
                         }
                     }
