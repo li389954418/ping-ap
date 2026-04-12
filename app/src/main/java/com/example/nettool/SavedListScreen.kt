@@ -18,7 +18,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import kotlinx.coroutines.launch
 import org.json.JSONObject
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -44,8 +43,6 @@ fun SavedListScreen(
 
     var menuExpanded by remember { mutableStateOf(false) }
     var selectedEntryForMenu by remember { mutableStateOf<IpEntry?>(null) }
-
-    val scope = rememberCoroutineScope()
 
     fun startEditing(entry: IpEntry) {
         editingEntry = entry
@@ -82,14 +79,14 @@ fun SavedListScreen(
         // 分类 Tab 行
         if (categories.isNotEmpty()) {
             ScrollableTabRow(
-                selectedTabIndex = categories.indexOfFirst { it.name == selectedCategory }.coerceAtLeast(0),
+                selectedTabIndex = categories.indexOfFirst { it == selectedCategory }.coerceAtLeast(0),
                 edgePadding = 0.dp
             ) {
                 categories.forEach { category ->
                     Tab(
-                        selected = selectedCategory == category.name,
-                        onClick = { viewModel.setSelectedCategory(category.name) },
-                        text = { Text(category.name) }
+                        selected = selectedCategory == category,
+                        onClick = { viewModel.setSelectedCategory(category) },
+                        text = { Text(category) }
                     )
                 }
             }
@@ -108,10 +105,7 @@ fun SavedListScreen(
 
         LazyColumn(modifier = Modifier.weight(1f)) {
             items(entries, key = { it.id }) { entry ->
-                var allowPing by remember { mutableStateOf(true) }
-                LaunchedEffect(entry.category) {
-                    allowPing = viewModel.isCategoryAllowPing(entry.category)
-                }
+                val allowPing = viewModel.isCategoryAllowPing(entry.category)
 
                 Card(
                     modifier = Modifier
@@ -158,7 +152,7 @@ fun SavedListScreen(
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            if (entry.category != "默认") {
+                            if (entry.category != "默认" && entry.category != "全部") {
                                 Text(
                                     text = "分类: ${entry.category}",
                                     fontSize = 10.sp,
