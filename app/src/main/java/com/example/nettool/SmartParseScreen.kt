@@ -79,7 +79,6 @@ fun SmartParseScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // 分类选择
         ExposedDropdownMenuBox(
             expanded = categoryExpanded,
             onExpandedChange = { categoryExpanded = it }
@@ -169,7 +168,6 @@ fun SmartParseScreen(
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    // 显示分类（不可编辑）
                     OutlinedTextField(
                         value = selectedCategory,
                         onValueChange = {},
