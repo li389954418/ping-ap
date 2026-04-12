@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import org.json.JSONArray
 import org.json.JSONObject
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -60,7 +61,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // 模板操作
     fun addTemplate(template: TemplateEntry) {
         viewModelScope.launch {
             db.templateDao().insert(template)
@@ -105,49 +105,79 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _autoPingAddress.value = ""
     }
 
-    // 智能解析：自动解析文本并生成预览条目
+    // 智能解析：根据所有启用模板提取信息
     fun autoParseAndPreview(text: String): List<IpEntry> {
         val enabledTemplates = runBlocking { db.templateDao().getEnabledTemplates().firstOrNull() ?: emptyList() }
         if (enabledTemplates.isEmpty()) return emptyList()
 
-        val addressMatches = mutableListOf<String>()
-        val nameMatches = mutableListOf<String>()
-        val remarkMatches = mutableMapOf<String, MutableList<String>>()
+        val addressCandidates = mutableListOf<String>()
+        val nameCandidates = mutableListOf<String>()
+        val remarkMap = mutableMapOf<String, MutableList<String>>()
+        val multiIpMap = mutableMapOf<String, Int>() // 用于记录多IP出现顺序
 
         for (template in enabledTemplates) {
-            val pattern = try {
-                Regex(template.pattern)
-            } catch (e: Exception) {
-                continue
-            }
-            pattern.findAll(text).forEach { match ->
-                val value = match.value
-                when (template.targetField) {
-                    "address" -> addressMatches.add(value)
-                    "name" -> nameMatches.add(value)
-                    else -> {
-                        if (template.targetField.startsWith("remark_")) {
-                            val key = template.targetField.removePrefix("remark_")
-                            remarkMatches.getOrPut(key) { mutableListOf() }.add(value)
+            try {
+                val rulesArray = JSONArray(template.rulesJson)
+                for (i in 0 until rulesArray.length()) {
+                    val rule = rulesArray.getJSONObject(i)
+                    val keyword = rule.getString("keyword")
+                    val targetField = rule.getString("targetField")
+                    val extractUntil = rule.optString("extractUntil", "line")
+
+                    // 在文本中查找关键词
+                    val keywordIndex = text.indexOf(keyword, ignoreCase = true)
+                    if (keywordIndex >= 0) {
+                        // 提取内容：从关键词后开始，直到行尾或下一个关键词前
+                        val startIndex = keywordIndex + keyword.length
+                        val remaining = text.substring(startIndex)
+                        val endIndex = when (extractUntil) {
+                            "line" -> remaining.indexOfAny(charArrayOf('\n', '\r'))
+                            else -> remaining.indexOf(' ')
+                        }
+                        val extracted = if (endIndex > 0) {
+                            remaining.substring(0, endIndex).trim()
+                        } else {
+                            remaining.trim()
+                        }
+
+                        if (extracted.isNotEmpty()) {
+                            when {
+                                targetField == "address" -> {
+                                    if (!addressCandidates.contains(extracted)) {
+                                        addressCandidates.add(extracted)
+                                    }
+                                }
+                                targetField == "name" -> {
+                                    if (!nameCandidates.contains(extracted)) {
+                                        nameCandidates.add(extracted)
+                                    }
+                                }
+                                targetField.startsWith("remark_") -> {
+                                    val key = targetField.removePrefix("remark_")
+                                    remarkMap.getOrPut(key) { mutableListOf() }.add(extracted)
+                                }
+                            }
                         }
                     }
                 }
+            } catch (e: Exception) {
+                // 忽略解析错误
             }
         }
 
-        // 无 IP 地址则返回空
-        if (addressMatches.isEmpty()) return emptyList()
+        // 如果没有地址，则无法保存
+        if (addressCandidates.isEmpty()) return emptyList()
 
-        val primaryAddress = addressMatches.first()
-        val primaryName = nameMatches.firstOrNull() ?: primaryAddress
+        val primaryAddress = addressCandidates.first()
+        val primaryName = nameCandidates.firstOrNull() ?: primaryAddress
 
         val extraJson = JSONObject()
-        // 处理多 IP：第二个起存为 IP2, IP3...
-        addressMatches.drop(1).forEachIndexed { index, ip ->
+        // 处理多IP：第二个起存为IP2, IP3...
+        addressCandidates.drop(1).forEachIndexed { index, ip ->
             extraJson.put("IP${index + 2}", ip)
         }
         // 备注字段（冲突取第一个）
-        remarkMatches.forEach { (key, values) ->
+        remarkMap.forEach { (key, values) ->
             extraJson.put(key, values.firstOrNull() ?: "")
         }
 
@@ -160,7 +190,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
-    // 批量保存条目
     fun batchSaveEntries(entries: List<IpEntry>) {
         viewModelScope.launch {
             entries.forEach { entry ->
