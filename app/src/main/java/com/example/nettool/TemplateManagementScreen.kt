@@ -1,8 +1,11 @@
 package com.example.nettool
 
+import android.widget.TextView
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -10,6 +13,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
 import org.json.JSONArray
 import org.json.JSONObject
@@ -119,21 +123,20 @@ fun TemplateEditDialog(
     var templateName by remember { mutableStateOf(initialTemplate?.name ?: "") }
     var documentText by remember { mutableStateOf("") }
 
-    // 分词结果
-    var words by remember { mutableStateOf(listOf<String>()) }
-    // 使用 Map 记录每个词的选中状态
-    var selectedStates by remember { mutableStateOf(mapOf<String, Boolean>()) }
-
-    // 规则项
+    // 规则项列表
     data class RuleItem(val keyword: String, var targetField: String)
-    var rules by remember { mutableStateOf(listOf<RuleItem>()) }
+    val rules = remember { mutableStateListOf<RuleItem>() }
+
+    // 用于获取 TextView 中当前选中的文本
+    var textViewRef by remember { mutableStateOf<TextView?>(null) }
+    var selectedText by remember { mutableStateOf("") }
 
     // 初始化编辑模式
     LaunchedEffect(initialTemplate) {
         initialTemplate?.let { template ->
             templateName = template.name
+            documentText = "" // 编辑时不保存原文
             val rulesList = mutableListOf<RuleItem>()
-            val stateMap = mutableMapOf<String, Boolean>()
             try {
                 val jsonArray = JSONArray(template.rulesJson)
                 for (i in 0 until jsonArray.length()) {
@@ -141,11 +144,10 @@ fun TemplateEditDialog(
                     val keyword = obj.getString("keyword")
                     val targetField = obj.getString("targetField")
                     rulesList.add(RuleItem(keyword, targetField))
-                    stateMap[keyword] = true
                 }
             } catch (_: Exception) { }
-            rules = rulesList
-            selectedStates = stateMap
+            rules.clear()
+            rules.addAll(rulesList)
             step = 2
         }
     }
@@ -174,54 +176,83 @@ fun TemplateEditDialog(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Button(
-                        onClick = {
-                            val delimiters = Regex("[\\s,，。.、;；:：!！?？()（）\\[\\]【】\"'‘’“”\\n\\r]+")
-                            words = documentText.split(delimiters)
-                                .filter { it.length >= 2 }
-                                .distinct()
-                            // 初始化所有词为未选中
-                            selectedStates = words.associateWith { false }.toMutableMap()
-                            step = 2
-                        },
+                        onClick = { step = 2 },
                         enabled = templateName.isNotBlank() && documentText.isNotBlank()
                     ) {
                         Text("下一步：滑动选词")
                     }
                 } else {
-                    Text("滑动开关选择关键词", style = MaterialTheme.typography.titleSmall)
+                    Text("在原文中滑动选择关键词", style = MaterialTheme.typography.titleSmall)
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    if (words.isNotEmpty() && initialTemplate == null) {
-                        LazyColumn(modifier = Modifier.heightIn(max = 250.dp)) {
-                            items(words) { word ->
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 4.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(word, modifier = Modifier.weight(1f))
-                                    Switch(
-                                        checked = selectedStates[word] ?: false,
-                                        onCheckedChange = { checked ->
-                                            selectedStates = selectedStates.toMutableMap().apply {
-                                                put(word, checked)
-                                            }
-                                            if (checked) {
-                                                if (rules.none { it.keyword == word }) {
-                                                    rules = rules + RuleItem(word, "")
-                                                }
-                                            } else {
-                                                rules = rules.filter { it.keyword != word }
-                                            }
-                                        }
-                                    )
+                    // 使用 AndroidView 嵌入原生 TextView，支持自由文本选择
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 80.dp, max = 180.dp)
+                    ) {
+                        AndroidView(
+                            factory = { context ->
+                                TextView(context).apply {
+                                    text = documentText
+                                    setTextIsSelectable(true)  // 启用选择功能
+                                    // 监听选择变化，实时更新 selectedText
+                                    setOnClickListener { } // 确保可以获取焦点
+                                    post {
+                                        // 通过反射或自定义监听获取选择内容，这里使用更简单的方式：
+                                        // 在外部按钮点击时通过 textViewRef 获取
+                                    }
                                 }
+                            },
+                            update = { textView ->
+                                textView.text = documentText
+                            },
+                            modifier = Modifier.fillMaxSize()
+                        ) { textView ->
+                            // 保存引用供外部使用
+                            LaunchedEffect(textView) {
+                                textViewRef = textView
                             }
                         }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // 获取当前选中文本并添加为关键词
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("当前选中：${selectedText.ifBlank { "无" }}", style = MaterialTheme.typography.bodySmall)
+                        Button(
+                            onClick = {
+                                textViewRef?.let { tv ->
+                                    val start = tv.selectionStart
+                                    val end = tv.selectionEnd
+                                    if (start >= 0 && end > start) {
+                                        val selected = tv.text.subSequence(start, end).toString()
+                                        if (selected.isNotBlank() && rules.none { it.keyword == selected }) {
+                                            rules.add(RuleItem(selected, ""))
+                                            selectedText = selected
+                                        }
+                                    }
+                                }
+                            },
+                            enabled = textViewRef != null
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = null)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("添加选中")
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text("已添加的关键词 (${rules.size})", style = MaterialTheme.typography.titleSmall)
+                    if (rules.isEmpty()) {
+                        Text("暂无，请在上方选择文本后点击“添加选中”", style = MaterialTheme.typography.bodySmall)
                     } else {
-                        Text("已配置的关键词规则：")
                         LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
                             items(rules.size) { index ->
                                 val rule = rules[index]
@@ -233,42 +264,18 @@ fun TemplateEditDialog(
                                     OutlinedTextField(
                                         value = rule.targetField,
                                         onValueChange = { newField ->
-                                            rules = rules.toMutableList().apply {
-                                                set(index, rule.copy(targetField = newField))
-                                            }
+                                            rules[index] = rule.copy(targetField = newField)
                                         },
                                         label = { Text("目标字段") },
                                         modifier = Modifier.weight(2f),
                                         singleLine = true
                                     )
+                                    IconButton(onClick = {
+                                        rules.removeAt(index)
+                                    }) {
+                                        Icon(Icons.Default.Delete, contentDescription = "删除")
+                                    }
                                 }
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    // 为选中的词汇配置字段（新增时）
-                    if (initialTemplate == null && selectedStates.any { it.value }) {
-                        Text("为选中的关键词指定目标字段：")
-                        rules.filter { it.targetField.isBlank() }.forEachIndexed { _, rule ->
-                            val index = rules.indexOfFirst { it.keyword == rule.keyword }
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(rule.keyword, modifier = Modifier.weight(1f))
-                                OutlinedTextField(
-                                    value = rule.targetField,
-                                    onValueChange = { newField ->
-                                        rules = rules.toMutableList().apply {
-                                            set(index, rule.copy(targetField = newField))
-                                        }
-                                    },
-                                    label = { Text("字段 (如 remark_设备)") },
-                                    modifier = Modifier.weight(2f),
-                                    singleLine = true
-                                )
                             }
                         }
                     }
