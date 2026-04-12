@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -43,6 +44,8 @@ fun SavedListScreen(
 
     var menuExpanded by remember { mutableStateOf(false) }
     var selectedEntryForMenu by remember { mutableStateOf<IpEntry?>(null) }
+
+    val scope = rememberCoroutineScope()
 
     fun startEditing(entry: IpEntry) {
         editingEntry = entry
@@ -105,7 +108,10 @@ fun SavedListScreen(
 
         LazyColumn(modifier = Modifier.weight(1f)) {
             items(entries, key = { it.id }) { entry ->
-                val allowPing = remember { viewModel.isCategoryAllowPing(entry.category) }
+                var allowPing by remember { mutableStateOf(true) }
+                LaunchedEffect(entry.category) {
+                    allowPing = viewModel.isCategoryAllowPing(entry.category)
+                }
 
                 Card(
                     modifier = Modifier
