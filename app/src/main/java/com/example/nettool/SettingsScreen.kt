@@ -31,7 +31,7 @@ fun SettingsScreen(
         Text("⚙️ 设置", style = MaterialTheme.typography.headlineSmall)
         Spacer(modifier = Modifier.height(16.dp))
 
-        // 识别模板管理入口
+        // 识别模板管理
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -45,6 +45,26 @@ fun SettingsScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text("📝 识别模板管理")
+                Icon(Icons.Default.ChevronRight, contentDescription = null)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // 分类管理
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { navController?.navigate("category_management") }
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("📂 分类管理")
                 Icon(Icons.Default.ChevronRight, contentDescription = null)
             }
         }
