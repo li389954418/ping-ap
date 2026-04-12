@@ -80,13 +80,6 @@ class MainActivity : ComponentActivity() {
                                 onBack = { navController.popBackStack() }
                             )
                         }
-                        // 确保存在分类管理路由
-                        composable("category_management") {
-                            CategoryManagementScreen(
-                                viewModel = viewModel,
-                                onBack = { navController.popBackStack() }
-                            )
-                        }
                     }
                 }
             }
