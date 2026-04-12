@@ -113,7 +113,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val addressCandidates = mutableListOf<String>()
         val nameCandidates = mutableListOf<String>()
         val remarkMap = mutableMapOf<String, MutableList<String>>()
-        val multiIpMap = mutableMapOf<String, Int>() // 用于记录多IP出现顺序
 
         for (template in enabledTemplates) {
             try {
