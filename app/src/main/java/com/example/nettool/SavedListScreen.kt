@@ -292,7 +292,6 @@ fun SavedListScreen(
                         modifier = Modifier.fillMaxWidth()
                     )
 
-                    // 如果是 IMS 分类，显示专有字段
                     if (editingEntry!!.category == "IMS") {
                         Spacer(modifier = Modifier.height(8.dp))
                         OutlinedTextField(
@@ -419,6 +418,7 @@ fun SavedListScreen(
     }
 }
 
+// 扩展函数，简化调用
 suspend fun MainViewModel.isCategoryAllowPing(category: String): Boolean {
     return try {
         isCategoryAllowPing(category)
