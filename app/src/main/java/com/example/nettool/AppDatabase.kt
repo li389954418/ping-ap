@@ -6,8 +6,10 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import org.json.JSONArray
+import org.json.JSONObject
 
-@Database(entities = [IpEntry::class, TemplateEntry::class], version = 3)
+@Database(entities = [IpEntry::class, TemplateEntry::class], version = 4)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun ipDao(): IpDao
     abstract fun templateDao(): TemplateDao
@@ -33,9 +35,46 @@ abstract class AppDatabase : RoomDatabase() {
                         enabled INTEGER NOT NULL DEFAULT 1
                     )
                 """)
-                // 插入默认模板
                 database.execSQL("INSERT INTO template_table (name, pattern, targetField, enabled) VALUES ('IPv4地址', '\\b(?:[0-9]{1,3}\\.){3}[0-9]{1,3}\\b', 'address', 1)")
                 database.execSQL("INSERT INTO template_table (name, pattern, targetField, enabled) VALUES ('域名', '\\b([a-zA-Z0-9-]+\\.)+[a-zA-Z]{2,}\\b', 'address', 1)")
+            }
+        }
+
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // 1. 创建新表（临时）
+                database.execSQL("""
+                    CREATE TABLE template_table_new (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        name TEXT NOT NULL,
+                        rulesJson TEXT NOT NULL DEFAULT '[]',
+                        enabled INTEGER NOT NULL DEFAULT 1
+                    )
+                """)
+                // 2. 迁移数据：将旧的正则模板转换为新格式（作为特殊关键词存储，但保留原功能）
+                val cursor = database.query("SELECT id, name, pattern, targetField, enabled FROM template_table")
+                while (cursor.moveToNext()) {
+                    val id = cursor.getInt(0)
+                    val name = cursor.getString(1)
+                    val pattern = cursor.getString(2)
+                    val targetField = cursor.getString(3)
+                    val enabled = cursor.getInt(4)
+                    // 对于正则模板，我们将其包装成一个特殊的子规则（type="regex"）
+                    val rules = JSONArray()
+                    val rule = JSONObject()
+                    rule.put("type", "regex")
+                    rule.put("pattern", pattern)
+                    rule.put("targetField", targetField)
+                    rules.put(rule)
+                    database.execSQL(
+                        "INSERT INTO template_table_new (id, name, rulesJson, enabled) VALUES (?, ?, ?, ?)",
+                        arrayOf(id, name, rules.toString(), enabled)
+                    )
+                }
+                cursor.close()
+                // 3. 删除旧表，重命名新表
+                database.execSQL("DROP TABLE template_table")
+                database.execSQL("ALTER TABLE template_table_new RENAME TO template_table")
             }
         }
 
@@ -45,7 +84,7 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "ip_database"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                  .build()
                 INSTANCE = instance
                 instance
