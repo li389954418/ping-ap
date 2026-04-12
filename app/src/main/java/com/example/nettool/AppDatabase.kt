@@ -9,11 +9,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import org.json.JSONArray
 import org.json.JSONObject
 
-@Database(entities = [IpEntry::class, TemplateEntry::class, CategoryEntry::class], version = 5)
+@Database(entities = [IpEntry::class, TemplateEntry::class], version = 4)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun ipDao(): IpDao
     abstract fun templateDao(): TemplateDao
-    abstract fun categoryDao(): CategoryDao
 
     companion object {
         @Volatile
@@ -43,6 +42,9 @@ abstract class AppDatabase : RoomDatabase() {
 
         private val MIGRATION_3_4 = object : Migration(3, 4) {
             override fun migrate(database: SupportSQLiteDatabase) {
+                // 增加分类列
+                database.execSQL("ALTER TABLE ip_table ADD COLUMN category TEXT NOT NULL DEFAULT '默认'")
+                // 转换模板表到新格式
                 database.execSQL("""
                     CREATE TABLE template_table_new (
                         id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
@@ -75,30 +77,13 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
-        private val MIGRATION_4_5 = object : Migration(4, 5) {
-            override fun migrate(database: SupportSQLiteDatabase) {
-                database.execSQL("ALTER TABLE ip_table ADD COLUMN category TEXT NOT NULL DEFAULT '默认'")
-                database.execSQL("""
-                    CREATE TABLE IF NOT EXISTS category_table (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-                        name TEXT NOT NULL UNIQUE,
-                        allowPing INTEGER NOT NULL DEFAULT 1
-                    )
-                """)
-                database.execSQL("INSERT OR IGNORE INTO category_table (name, allowPing) VALUES ('默认', 1)")
-                database.execSQL("INSERT OR IGNORE INTO category_table (name, allowPing) VALUES ('医保/水务', 0)")
-                database.execSQL("INSERT OR IGNORE INTO category_table (name, allowPing) VALUES ('IMS', 0)")
-                database.execSQL("INSERT OR IGNORE INTO category_table (name, allowPing) VALUES ('数据专线', 0)")
-            }
-        }
-
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
                     "ip_database"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                  .build()
                 INSTANCE = instance
                 instance
