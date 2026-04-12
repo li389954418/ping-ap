@@ -1,5 +1,6 @@
 package com.example.nettool
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -16,6 +17,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.launch
 import org.json.JSONObject
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -26,6 +28,8 @@ fun SavedListScreen(
 ) {
     val entries by viewModel.entries.collectAsState(initial = emptyList())
     val searchQuery by viewModel.searchQuery.collectAsState(initial = "")
+    val categories by viewModel.categories.collectAsState(initial = emptyList())
+    val selectedCategory by viewModel.selectedCategory.collectAsState()
 
     var editingEntry by remember { mutableStateOf<IpEntry?>(null) }
     var showDetailDialog by remember { mutableStateOf<IpEntry?>(null) }
@@ -33,6 +37,9 @@ fun SavedListScreen(
     var remarkItems by remember { mutableStateOf(listOf<Pair<String, String>>()) }
     var mainRemark by remember { mutableStateOf("") }
     var customerAddress by remember { mutableStateOf("") }
+    var imsPort by remember { mutableStateOf("") }
+    var imsNumber by remember { mutableStateOf("") }
+    var imsPassword by remember { mutableStateOf("") }
 
     var menuExpanded by remember { mutableStateOf(false) }
     var selectedEntryForMenu by remember { mutableStateOf<IpEntry?>(null) }
@@ -45,33 +52,47 @@ fun SavedListScreen(
         } catch (e: Exception) {
             JSONObject()
         }
-        // 提取客户地址
-        customerAddress = json.optString("地址", "").ifBlank {
-            json.optString("address", "")
-        }
-        // 提取除地址外的其他备注项
+        customerAddress = json.optString("地址", "").ifBlank { json.optString("address", "") }
+        imsPort = json.optString("ims_port", "")
+        imsNumber = json.optString("ims_number", "")
+        imsPassword = json.optString("ims_password", "")
         val items = mutableListOf<Pair<String, String>>()
         json.keys().forEach { key ->
-            if (key != "地址" && key != "address") {
+            if (key != "地址" && key != "address" && !key.matches(Regex("IP\\d+"))
+                && key != "ims_port" && key != "ims_number" && key != "ims_password") {
                 items.add(key to json.optString(key, ""))
             }
         }
         remarkItems = items
     }
 
-    // 从额外备注中提取客户地址（用于卡片显示）
     fun getCustomerAddress(extraRemarks: String): String {
         return try {
             val json = JSONObject(extraRemarks)
-            json.optString("地址", "").ifBlank {
-                json.optString("address", "").ifBlank { "—" }
-            }
+            json.optString("地址", "").ifBlank { json.optString("address", "").ifBlank { "—" } }
         } catch (e: Exception) {
             "—"
         }
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+        // 分类 Tab 行
+        if (categories.isNotEmpty()) {
+            ScrollableTabRow(
+                selectedTabIndex = categories.indexOfFirst { it.name == selectedCategory }.coerceAtLeast(0),
+                edgePadding = 0.dp
+            ) {
+                categories.forEach { category ->
+                    Tab(
+                        selected = selectedCategory == category.name,
+                        onClick = { viewModel.setSelectedCategory(category.name) },
+                        text = { Text(category.name) }
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+
         OutlinedTextField(
             value = searchQuery,
             onValueChange = { viewModel.updateSearchQuery(it) },
@@ -84,6 +105,8 @@ fun SavedListScreen(
 
         LazyColumn(modifier = Modifier.weight(1f)) {
             items(entries, key = { it.id }) { entry ->
+                val allowPing = remember { viewModel.isCategoryAllowPing(entry.category) }
+
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -91,8 +114,10 @@ fun SavedListScreen(
                         .pointerInput(entry.id) {
                             detectTapGestures(
                                 onTap = {
-                                    viewModel.triggerAutoPing(entry.address)
-                                    onNavigateToHome()
+                                    if (allowPing) {
+                                        viewModel.triggerAutoPing(entry.address)
+                                        onNavigateToHome()
+                                    }
                                 },
                                 onLongPress = {
                                     selectedEntryForMenu = entry
@@ -127,8 +152,14 @@ fun SavedListScreen(
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                            if (entry.category != "默认") {
+                                Text(
+                                    text = "分类: ${entry.category}",
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
                         }
-                        // 放大镜图标：查看详情（无标题弹窗）
                         IconButton(
                             onClick = { showDetailDialog = entry }
                         ) {
@@ -166,7 +197,7 @@ fun SavedListScreen(
         }
     }
 
-    // 详情弹窗（无标题，仅内容）
+    // 详情弹窗
     showDetailDialog?.let { entry ->
         val extraJson = try {
             JSONObject(entry.extraRemarks)
@@ -175,7 +206,10 @@ fun SavedListScreen(
         }
         val items = mutableListOf<Pair<String, String>>()
         extraJson.keys().forEach { key ->
-            items.add(key to extraJson.getString(key))
+            if (key != "地址" && key != "address" && !key.matches(Regex("IP\\d+"))
+                && key != "ims_port" && key != "ims_number" && key != "ims_password") {
+                items.add(key to extraJson.getString(key))
+            }
         }
 
         AlertDialog(
@@ -183,12 +217,29 @@ fun SavedListScreen(
             title = { /* 无标题 */ },
             text = {
                 Column {
-                    Text("客户名称: ${entry.name}")
-                    Text("IP/域名: ${entry.address}")
-                    Spacer(modifier = Modifier.height(8.dp))
-                    if (items.isNotEmpty()) {
-                        items.forEach { (k, v) ->
-                            Text("$k: $v")
+                    SelectionContainer {
+                        Column {
+                            Text("客户名称: ${entry.name}")
+                            Text("IP/域名: ${entry.address}")
+                            if (entry.category != "默认") {
+                                Text("分类: ${entry.category}")
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            val addr = extraJson.optString("地址", "").ifBlank { extraJson.optString("address", "") }
+                            if (addr.isNotBlank()) {
+                                Text("地址: $addr")
+                            }
+                            if (entry.category == "IMS") {
+                                val port = extraJson.optString("ims_port", "")
+                                val number = extraJson.optString("ims_number", "")
+                                val password = extraJson.optString("ims_password", "")
+                                if (port.isNotBlank()) Text("端口号: $port")
+                                if (number.isNotBlank()) Text("号码: $number")
+                                if (password.isNotBlank()) Text("注册密码: $password")
+                            }
+                            items.forEach { (k, v) ->
+                                Text("$k: $v")
+                            }
                         }
                     }
                 }
@@ -198,11 +249,11 @@ fun SavedListScreen(
                     Text("关闭")
                 }
             },
-            dismissButton = null  // 不需要取消按钮
+            dismissButton = null
         )
     }
 
-    // 编辑对话框（增加客户地址字段）
+    // 编辑对话框
     if (editingEntry != null) {
         AlertDialog(
             onDismissRequest = { editingEntry = null },
@@ -218,13 +269,54 @@ fun SavedListScreen(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
+                        value = editingEntry!!.address,
+                        onValueChange = { newAddr ->
+                            editingEntry = editingEntry!!.copy(address = newAddr)
+                        },
+                        label = { Text("IP 地址") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
                         value = customerAddress,
                         onValueChange = { customerAddress = it },
                         label = { Text("客户地址") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
+
+                    // 如果是 IMS 分类，显示专有字段
+                    if (editingEntry!!.category == "IMS") {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = imsPort,
+                            onValueChange = { imsPort = it },
+                            label = { Text("端口号") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = imsNumber,
+                            onValueChange = { imsNumber = it },
+                            label = { Text("号码") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = imsPassword,
+                            onValueChange = { imsPassword = it },
+                            label = { Text("注册密码") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+
                     Spacer(modifier = Modifier.height(16.dp))
+                    Text("额外备注", style = MaterialTheme.typography.titleSmall)
+                    Spacer(modifier = Modifier.height(8.dp))
                     LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
                         itemsIndexed(remarkItems) { index, (key, value) ->
                             Row(
@@ -280,11 +372,22 @@ fun SavedListScreen(
                 TextButton(onClick = {
                     editingEntry?.let { entry ->
                         val json = JSONObject()
-                        // 保存客户地址
+                        try {
+                            val oldJson = JSONObject(entry.extraRemarks)
+                            oldJson.keys().forEach { key ->
+                                if (key.matches(Regex("IP\\d+"))) {
+                                    json.put(key, oldJson.get(key))
+                                }
+                            }
+                        } catch (_: Exception) {}
                         if (customerAddress.isNotBlank()) {
                             json.put("地址", customerAddress)
                         }
-                        // 保存其他备注项
+                        if (entry.category == "IMS") {
+                            if (imsPort.isNotBlank()) json.put("ims_port", imsPort)
+                            if (imsNumber.isNotBlank()) json.put("ims_number", imsNumber)
+                            if (imsPassword.isNotBlank()) json.put("ims_password", imsPassword)
+                        }
                         remarkItems.forEach { (k, v) ->
                             if (k.isNotBlank()) {
                                 json.put(k, v)
@@ -307,5 +410,13 @@ fun SavedListScreen(
                 }
             }
         )
+    }
+}
+
+suspend fun MainViewModel.isCategoryAllowPing(category: String): Boolean {
+    return try {
+        isCategoryAllowPing(category)
+    } catch (e: Exception) {
+        true
     }
 }
