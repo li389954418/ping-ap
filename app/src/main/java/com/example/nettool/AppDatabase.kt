@@ -9,10 +9,11 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import org.json.JSONArray
 import org.json.JSONObject
 
-@Database(entities = [IpEntry::class, TemplateEntry::class], version = 4)
+@Database(entities = [IpEntry::class, TemplateEntry::class, CategoryEntry::class], version = 5)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun ipDao(): IpDao
     abstract fun templateDao(): TemplateDao
+    abstract fun categoryDao(): CategoryDao
 
     companion object {
         @Volatile
@@ -42,7 +43,6 @@ abstract class AppDatabase : RoomDatabase() {
 
         private val MIGRATION_3_4 = object : Migration(3, 4) {
             override fun migrate(database: SupportSQLiteDatabase) {
-                // 1. 创建新表（临时）
                 database.execSQL("""
                     CREATE TABLE template_table_new (
                         id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
@@ -51,7 +51,6 @@ abstract class AppDatabase : RoomDatabase() {
                         enabled INTEGER NOT NULL DEFAULT 1
                     )
                 """)
-                // 2. 迁移数据：将旧的正则模板转换为新格式（作为特殊关键词存储，但保留原功能）
                 val cursor = database.query("SELECT id, name, pattern, targetField, enabled FROM template_table")
                 while (cursor.moveToNext()) {
                     val id = cursor.getInt(0)
@@ -59,7 +58,6 @@ abstract class AppDatabase : RoomDatabase() {
                     val pattern = cursor.getString(2)
                     val targetField = cursor.getString(3)
                     val enabled = cursor.getInt(4)
-                    // 对于正则模板，我们将其包装成一个特殊的子规则（type="regex"）
                     val rules = JSONArray()
                     val rule = JSONObject()
                     rule.put("type", "regex")
@@ -72,9 +70,25 @@ abstract class AppDatabase : RoomDatabase() {
                     )
                 }
                 cursor.close()
-                // 3. 删除旧表，重命名新表
                 database.execSQL("DROP TABLE template_table")
                 database.execSQL("ALTER TABLE template_table_new RENAME TO template_table")
+            }
+        }
+
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE ip_table ADD COLUMN category TEXT NOT NULL DEFAULT '默认'")
+                database.execSQL("""
+                    CREATE TABLE IF NOT EXISTS category_table (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        name TEXT NOT NULL UNIQUE,
+                        allowPing INTEGER NOT NULL DEFAULT 1
+                    )
+                """)
+                database.execSQL("INSERT OR IGNORE INTO category_table (name, allowPing) VALUES ('默认', 1)")
+                database.execSQL("INSERT OR IGNORE INTO category_table (name, allowPing) VALUES ('医保/水务', 0)")
+                database.execSQL("INSERT OR IGNORE INTO category_table (name, allowPing) VALUES ('IMS', 0)")
+                database.execSQL("INSERT OR IGNORE INTO category_table (name, allowPing) VALUES ('数据专线', 0)")
             }
         }
 
@@ -84,7 +98,7 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "ip_database"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                  .build()
                 INSTANCE = instance
                 instance
