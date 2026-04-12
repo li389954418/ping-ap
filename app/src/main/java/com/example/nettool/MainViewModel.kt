@@ -20,7 +20,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery
 
-    // 固定分类列表
     private val fixedCategories = listOf("全部", "默认", "医保/供水专线", "IMS", "数据专线")
     val categories: StateFlow<List<String>> = MutableStateFlow(fixedCategories)
 
@@ -94,7 +93,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // 判断分类是否允许 Ping
     fun isCategoryAllowPing(category: String): Boolean {
         return when (category) {
             "医保/供水专线", "IMS", "数据专线" -> false

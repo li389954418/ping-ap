@@ -31,7 +31,6 @@ fun SettingsScreen(
         Text("⚙️ 设置", style = MaterialTheme.typography.headlineSmall)
         Spacer(modifier = Modifier.height(16.dp))
 
-        // 识别模板管理入口
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -51,7 +50,6 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // 关于卡片
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text("关于", style = MaterialTheme.typography.titleMedium)
@@ -63,7 +61,6 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // 崩溃日志卡片
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text("📄 崩溃日志", style = MaterialTheme.typography.titleMedium)

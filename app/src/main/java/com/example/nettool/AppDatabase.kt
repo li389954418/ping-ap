@@ -42,9 +42,7 @@ abstract class AppDatabase : RoomDatabase() {
 
         private val MIGRATION_3_4 = object : Migration(3, 4) {
             override fun migrate(database: SupportSQLiteDatabase) {
-                // 增加分类列
                 database.execSQL("ALTER TABLE ip_table ADD COLUMN category TEXT NOT NULL DEFAULT '默认'")
-                // 转换模板表到新格式
                 database.execSQL("""
                     CREATE TABLE template_table_new (
                         id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
