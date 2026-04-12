@@ -88,7 +88,6 @@ fun TemplateManagementScreen(
         }
     }
 
-    // 新增/编辑模板对话框（两阶段）
     if (showAddDialog || editingTemplate != null) {
         TemplateEditDialog(
             initialTemplate = editingTemplate,
@@ -116,24 +115,19 @@ fun TemplateEditDialog(
     onDismiss: () -> Unit,
     onSave: (name: String, rulesJson: String) -> Unit
 ) {
-    var step by remember { mutableStateOf(1) } // 1: 输入文档并分词, 2: 配置规则
+    var step by remember { mutableStateOf(1) }
     var templateName by remember { mutableStateOf(initialTemplate?.name ?: "") }
     var documentText by remember { mutableStateOf("") }
 
-    // 分词结果：词汇 -> 是否选中
+    // 分词结果
     var words by remember { mutableStateOf(listOf<String>()) }
     var selectedWords by remember { mutableStateOf(setOf<String>()) }
 
-    // 规则列表：每个选中词汇对应一个目标字段
+    // 规则项
+    data class RuleItem(val keyword: String, var targetField: String)
     var rules by remember { mutableStateOf(listOf<RuleItem>()) }
 
-    data class RuleItem(
-        val keyword: String,
-        var targetField: String,
-        var extractUntil: String = "line" // 简化，固定提取到行尾
-    )
-
-    // 初始化：如果是编辑模式，从 rulesJson 恢复状态
+    // 初始化编辑模式
     LaunchedEffect(initialTemplate) {
         initialTemplate?.let { template ->
             templateName = template.name
@@ -148,10 +142,9 @@ fun TemplateEditDialog(
                     rulesList.add(RuleItem(keyword, targetField))
                     wordsSet.add(keyword)
                 }
-            } catch (e: Exception) { }
+            } catch (_: Exception) { }
             rules = rulesList
             selectedWords = wordsSet
-            // 注意：编辑时 documentText 无原始文档，无法重新分词，直接进入步骤2
             step = 2
         }
     }
@@ -181,10 +174,9 @@ fun TemplateEditDialog(
                     Spacer(modifier = Modifier.height(8.dp))
                     Button(
                         onClick = {
-                            // 分词：按空格、换行、标点分割
                             val delimiters = Regex("[\\s,，。.、;；:：!！?？()（）\\[\\]【】\"'‘’“”\\n\\r]+")
                             words = documentText.split(delimiters)
-                                .filter { it.length >= 2 } // 至少两个字符
+                                .filter { it.length >= 2 }
                                 .distinct()
                             step = 2
                         },
@@ -193,10 +185,9 @@ fun TemplateEditDialog(
                         Text("下一步：选择关键词")
                     }
                 } else {
-                    // 步骤2：展示分词结果，多选，并为选中项配置字段
                     Text("选择关键词并指定字段", style = MaterialTheme.typography.titleSmall)
                     Spacer(modifier = Modifier.height(8.dp))
-                    // 如果是新增且 words 为空（从步骤1过来），则显示分词结果
+
                     if (words.isNotEmpty() && initialTemplate == null) {
                         LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
                             items(words) { word ->
@@ -207,15 +198,13 @@ fun TemplateEditDialog(
                                     Checkbox(
                                         checked = selectedWords.contains(word),
                                         onCheckedChange = { checked ->
-                                            selectedWords = if (checked) {
-                                                selectedWords + word
+                                            if (checked) {
+                                                selectedWords = selectedWords + word
+                                                if (rules.none { it.keyword == word }) {
+                                                    rules = rules + RuleItem(word, "")
+                                                }
                                             } else {
-                                                selectedWords - word
-                                            }
-                                            // 同步更新 rules
-                                            if (checked && rules.none { it.keyword == word }) {
-                                                rules = rules + RuleItem(word, "")
-                                            } else if (!checked) {
+                                                selectedWords = selectedWords - word
                                                 rules = rules.filter { it.keyword != word }
                                             }
                                         }
@@ -225,10 +214,10 @@ fun TemplateEditDialog(
                             }
                         }
                     } else {
-                        // 编辑模式或无分词结果时，直接展示已配置的规则
                         Text("已配置的关键词规则：")
                         LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
-                            items(rules) { rule ->
+                            items(rules.size) { index ->
+                                val rule = rules[index]
                                 Row(
                                     modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                                     verticalAlignment = Alignment.CenterVertically
@@ -237,11 +226,8 @@ fun TemplateEditDialog(
                                     OutlinedTextField(
                                         value = rule.targetField,
                                         onValueChange = { newField ->
-                                            val index = rules.indexOf(rule)
-                                            if (index >= 0) {
-                                                rules = rules.toMutableList().apply {
-                                                    set(index, rule.copy(targetField = newField))
-                                                }
+                                            rules = rules.toMutableList().apply {
+                                                set(index, rule.copy(targetField = newField))
                                             }
                                         },
                                         label = { Text("目标字段") },
@@ -252,8 +238,10 @@ fun TemplateEditDialog(
                             }
                         }
                     }
+
                     Spacer(modifier = Modifier.height(8.dp))
-                    // 如果是从步骤1过来的且已选中词汇，需要为它们配置字段
+
+                    // 为选中的词汇配置字段（新增时）
                     if (initialTemplate == null && selectedWords.isNotEmpty()) {
                         Text("为选中的关键词指定目标字段：")
                         rules.forEachIndexed { index, rule ->
@@ -284,29 +272,26 @@ fun TemplateEditDialog(
         confirmButton = {
             TextButton(
                 onClick = {
-                    if (step == 1) {
-                        // 不会执行到这里，因为步骤1的按钮已处理
-                    } else {
-                        // 保存：将 rules 转为 JSON
+                    if (step == 2) {
                         val jsonArray = JSONArray()
                         rules.forEach { rule ->
                             if (rule.targetField.isNotBlank()) {
                                 val obj = JSONObject()
                                 obj.put("keyword", rule.keyword)
                                 obj.put("targetField", rule.targetField)
-                                obj.put("extractUntil", "line") // 固定提取到行尾
+                                obj.put("extractUntil", "line")
                                 jsonArray.put(obj)
                             }
                         }
                         onSave(templateName, jsonArray.toString())
                     }
                 },
-                enabled = when {
-                    step == 1 -> false
+                enabled = when (step) {
+                    1 -> false
                     else -> templateName.isNotBlank() && rules.isNotEmpty() && rules.all { it.targetField.isNotBlank() }
                 }
             ) {
-                Text(if (step == 1) "下一步" else "保存")
+                Text("保存")
             }
         },
         dismissButton = {
