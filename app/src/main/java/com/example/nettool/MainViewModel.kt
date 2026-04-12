@@ -16,16 +16,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val db = AppDatabase.getInstance(application)
     private val allEntries = db.ipDao().getAllEntries()
     private val allTemplates = db.templateDao().getAllTemplates()
-    private val allCategories = db.categoryDao().getAllCategories()
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery
+
+    // 固定分类列表
+    private val fixedCategories = listOf("全部", "默认", "医保/供水专线", "IMS", "数据专线")
+    val categories: StateFlow<List<String>> = MutableStateFlow(fixedCategories)
 
     private val _selectedCategory = MutableStateFlow("全部")
     val selectedCategory: StateFlow<String> = _selectedCategory
 
     val entries = combine(allEntries, _searchQuery, _selectedCategory) { list, query, category ->
-        val filtered = if (category == "全部") list else list.filter { it.category == category }
+        val filtered = when (category) {
+            "全部" -> list
+            else -> list.filter { it.category == category }
+        }
         if (query.isBlank()) filtered
         else filtered.filter {
             it.name.contains(query, ignoreCase = true) ||
@@ -34,7 +40,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     val templates = allTemplates
-    val categories = allCategories
 
     private val _pingResult = MutableStateFlow("")
     val pingResult: StateFlow<String> = _pingResult
@@ -89,26 +94,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun addCategory(category: CategoryEntry) {
-        viewModelScope.launch {
-            db.categoryDao().insert(category)
+    // 判断分类是否允许 Ping
+    fun isCategoryAllowPing(category: String): Boolean {
+        return when (category) {
+            "医保/供水专线", "IMS", "数据专线" -> false
+            else -> true
         }
-    }
-
-    fun updateCategory(category: CategoryEntry) {
-        viewModelScope.launch {
-            db.categoryDao().update(category)
-        }
-    }
-
-    fun deleteCategory(category: CategoryEntry) {
-        viewModelScope.launch {
-            db.categoryDao().delete(category)
-        }
-    }
-
-    suspend fun isCategoryAllowPing(category: String): Boolean {
-        return db.categoryDao().isPingAllowed(category)
     }
 
     fun pingAddress(address: String) {
