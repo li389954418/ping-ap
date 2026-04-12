@@ -29,6 +29,10 @@ fun SmartParseScreen(
     var mainRemark by remember { mutableStateOf("") }
     var customerAddress by remember { mutableStateOf("") }
     var remarkItems by remember { mutableStateOf(listOf<Pair<String, String>>()) }
+    var selectedCategory by remember { mutableStateOf("默认") }
+
+    val categories by viewModel.categories.collectAsState(initial = emptyList())
+    var categoryExpanded by remember { mutableStateOf(false) }
 
     fun startEditing(entry: IpEntry) {
         editingEntry = entry
@@ -46,6 +50,7 @@ fun SmartParseScreen(
             }
         }
         remarkItems = items
+        selectedCategory = entry.category
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
@@ -74,10 +79,41 @@ fun SmartParseScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // 分类选择
+        ExposedDropdownMenuBox(
+            expanded = categoryExpanded,
+            onExpandedChange = { categoryExpanded = it }
+        ) {
+            OutlinedTextField(
+                value = selectedCategory,
+                onValueChange = {},
+                readOnly = true,
+                label = { Text("选择分类") },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = categoryExpanded) },
+                modifier = Modifier.fillMaxWidth().menuAnchor()
+            )
+            ExposedDropdownMenu(
+                expanded = categoryExpanded,
+                onDismissRequest = { categoryExpanded = false }
+            ) {
+                categories.forEach { category ->
+                    DropdownMenuItem(
+                        text = { Text(category.name) },
+                        onClick = {
+                            selectedCategory = category.name
+                            categoryExpanded = false
+                        }
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
         Button(
             onClick = {
                 isProcessing = true
-                previewEntries = viewModel.autoParseAndPreview(inputText)
+                previewEntries = viewModel.autoParseAndPreview(inputText, selectedCategory)
                 isProcessing = false
                 if (previewEntries.isNotEmpty()) {
                     startEditing(previewEntries.first())
@@ -101,7 +137,6 @@ fun SmartParseScreen(
         }
     }
 
-    // 确认编辑对话框（与之前相同）
     if (showConfirmDialog && editingEntry != null) {
         AlertDialog(
             onDismissRequest = { showConfirmDialog = false },
@@ -131,6 +166,15 @@ fun SmartParseScreen(
                         onValueChange = { customerAddress = it },
                         label = { Text("客户地址") },
                         singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    // 显示分类（不可编辑）
+                    OutlinedTextField(
+                        value = selectedCategory,
+                        onValueChange = {},
+                        label = { Text("分类") },
+                        readOnly = true,
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(modifier = Modifier.height(16.dp))
@@ -209,7 +253,8 @@ fun SmartParseScreen(
                         }
                         val updatedEntry = entry.copy(
                             name = mainRemark,
-                            extraRemarks = json.toString()
+                            extraRemarks = json.toString(),
+                            category = selectedCategory
                         )
                         viewModel.batchSaveEntries(listOf(updatedEntry))
                     }
