@@ -2,7 +2,6 @@ package com.example.nettool
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -26,7 +25,6 @@ fun SmartParseScreen(
     var previewEntries by remember { mutableStateOf<List<IpEntry>>(emptyList()) }
     var showConfirmDialog by remember { mutableStateOf(false) }
 
-    // 编辑预览时的临时状态
     var editingEntry by remember { mutableStateOf<IpEntry?>(null) }
     var mainRemark by remember { mutableStateOf("") }
     var customerAddress by remember { mutableStateOf("") }
@@ -93,7 +91,7 @@ fun SmartParseScreen(
                 CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                 Spacer(modifier = Modifier.width(8.dp))
             }
-            Text("自动填充预览")
+            Text("开始解析")
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -103,7 +101,7 @@ fun SmartParseScreen(
         }
     }
 
-    // 编辑预览对话框
+    // 确认编辑对话框（与之前相同）
     if (showConfirmDialog && editingEntry != null) {
         AlertDialog(
             onDismissRequest = { showConfirmDialog = false },
@@ -193,7 +191,6 @@ fun SmartParseScreen(
                 TextButton(onClick = {
                     editingEntry?.let { entry ->
                         val json = JSONObject()
-                        // 保存多 IP
                         try {
                             val oldJson = JSONObject(entry.extraRemarks)
                             oldJson.keys().forEach { key ->
