@@ -1,148 +1,54 @@
-# 🌐 NetTool - 安卓网络工具
+# Ping 工具 (NetTool)
 
-一款简洁高效的安卓网络诊断工具，使用 **Kotlin + Jetpack Compose** 构建。
+一款基于 Kotlin + Jetpack Compose 开发的 Android 网络诊断与地址管理工具。
 
-## ✨ 功能特性
+## ✨ 主要功能
 
-- **🚀 快速 Ping 测试**：输入 IP 地址或域名，一键测试网络连通性
-- **💾 地址收藏**：保存常用地址到本地数据库，支持添加备注
-- **🔍 智能搜索**：快速筛选已保存的地址
-- **🗑️ 便捷管理**：滑动删除不需要的地址
-- **📱 现代 UI**：Material Design 3 风格，简洁美观
+### 🌐 网络诊断
+- **ICMP Ping**：调用系统 `ping` 命令，支持自定义次数（0=长Ping）、包大小，实时显示结果和统计信息。
+- **TCP Ping**：自定义端口，通过 TCP 连接测延迟，适用于防火墙屏蔽 ICMP 的场景。
+- **开始/停止控制**：随时停止 Ping 任务，协程安全取消。
+- **结果导出**：可选中复制输出内容。
 
-## 🛠️ 技术栈
+### 📋 地址存储管理
+- **保存常用地址**：快速保存 IP 或域名，支持自定义客户名称。
+- **多备注系统**：为每个地址添加任意键值对备注（如设备型号、位置等）。
+- **搜索与过滤**：按客户名称或 IP 实时搜索。
+- **单击卡片自动 Ping**：一键跳转首页并开始测试。
+- **长按菜单**：删除或编辑条目。
+- **详情查看**：展示所有备注信息。
 
+### 🤖 智能解析（自动化录入）
+- **模板管理**：自定义关键词匹配规则，支持通过示例文档分词选择关键词。
+- **一键解析**：粘贴文档（如日志、配置文本），自动提取 IP、设备名、备注等信息，生成可编辑的预览条目。
+- **批量保存**：确认后直接存入数据库，大幅提升批量录入效率。
+
+### ⚙️ 其他特性
+- **底部导航**：首页、存储列表、设置。
+- **崩溃日志**：全局异常捕获，可在设置页查看日志详情。
+- **版本信息**：设置页显示当前版本号。
+- **Material 3 设计**：支持深色模式，界面简洁美观。
+
+## 📲 下载与安装
+
+### 从 GitHub Actions 获取 APK
+1. 访问本仓库的 [Actions](../../actions) 页面。
+2. 选择最新的 **Build APK** 工作流运行记录（绿色勾）。
+3. 在详情页底部的 **Artifacts** 区域下载 `PingApp-Debug.zip`。
+4. 解压后得到 `.apk` 文件，安装到手机即可。
+
+> 注意：需在手机设置中允许“安装未知来源应用”。
+
+## 🛠️ 开发与构建
+
+### 技术栈
 - **语言**：Kotlin
-- **UI 框架**：Jetpack Compose
-- **本地数据库**：Room
-- **异步处理**：Kotlin Coroutines + Flow
-- **架构模式**：MVVM
-- **依赖注入**：手动依赖注入（轻量级）
+- **UI 框架**：Jetpack Compose + Material 3
+- **架构组件**：ViewModel、Room、Navigation、DataStore
+- **异步处理**：Coroutines + Flow
+- **构建工具**：Gradle (Kotlin DSL)
 
-## 📋 系统要求
-
-- Android Studio Hedgehog (2023.1.1) 或更高版本
-- JDK 17
-- Android SDK 34 (Compile SDK)
-- 最低支持 Android 7.0 (API 24)
-
-## 🚀 快速开始
-
-### 1. 克隆/打开项目
-
-```bash
-# 在 Android Studio 中打开项目目录
-```
-
-### 2. 同步 Gradle
-
-打开项目后，Android Studio 会自动同步 Gradle 依赖。如需手动同步：
-```
-File → Sync Project with Gradle Files
-```
-
-### 3. 运行应用
-
-- **模拟器**：选择已配置的 Android 模拟器，点击 Run 按钮
-- **真机调试**：开启 USB 调试，连接设备后点击 Run
-
-### 4. 打包 APK
-
-#### 方法一：使用脚本（推荐）
-
-```bash
-chmod +x build-apk.sh
-./build-apk.sh
-```
-
-输出位置：`app/build/outputs/apk/release/app-release.apk`
-
-#### 方法二：Android Studio
-
-```
-Build → Generate Signed Bundle / APK → APK → Release
-```
-
-#### 方法三：命令行
-
-```bash
-./gradlew assembleRelease
-```
-
-## 📁 项目结构
-
-```
-app/
-├── src/main/
-│   ├── java/com/example/nettool/
-│   │   ├── data/              # 数据层
-│   │   │   ├── Address.kt     # 实体类
-│   │   │   ├── AddressDao.kt  # DAO 接口
-│   │   │   └── AppDatabase.kt # 数据库配置
-│   │   ├── net/               # 网络层
-│   │   │   └── Pinger.kt      # Ping 工具
-│   │   ├── ui/                # UI 层
-│   │   │   ├── theme/         # 主题配置
-│   │   │   ├── MainScreen.kt  # 主界面
-│   │   │   └── MainViewModel.kt # ViewModel
-│   │   └── MainActivity.kt    # 入口 Activity
-│   └── AndroidManifest.xml    # 应用清单
-└── build.gradle.kts           # 模块配置
-```
-
-## 🔐 签名配置（发布正式版本）
-
-如需签名发布版本，在 `app/build.gradle.kts` 中配置：
-
-```kotlin
-android {
-    signingConfigs {
-        create("release") {
-            storeFile = file("your-keystore.jks")
-            storePassword = "your-store-password"
-            keyAlias = "your-key-alias"
-            keyPassword = "your-key-password"
-        }
-    }
-    buildTypes {
-        release {
-            signingConfig = signingConfigs.getByName("release")
-        }
-    }
-}
-```
-
-## 📝 权限说明
-
-应用需要以下权限：
-
-- `INTERNET`：网络访问（Ping 测试必需）
-- `ACCESS_NETWORK_STATE`：网络状态检查
-
-## 🎨 界面预览
-
-### 主界面
-- 顶部：搜索栏（实时过滤地址列表）
-- 中部：快速 Ping 区域（输入框 + 测试按钮 + 结果展示）
-- 底部：已保存地址列表（支持滑动删除）
-- 浮动按钮：将当前测试地址保存到收藏
-
-## 🐛 常见问题
-
-**Q: Ping 结果显示超时？**
-A: 检查网络连接，或目标主机是否禁用了 ICMP 响应。
-
-**Q: 无法保存地址？**
-A: 确保 IP 地址格式正确，备注可为空。
-
-**Q: 构建失败？**
-A: 确保 JDK 版本为 17，Gradle 版本与 AGP 兼容。
-
-## 📄 许可证
-
-MIT License
-
----
-
-**开发时间**：2026  
-**技术栈版本**：Kotlin 1.9.20 | Compose BOM 2023.10.01 | Room 2.6.1
+### 本地构建
+1. 克隆仓库：
+   ```bash
+   git clone https://github.com/li389954418/ping-ap.git
