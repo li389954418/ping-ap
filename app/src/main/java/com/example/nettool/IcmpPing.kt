@@ -33,12 +33,13 @@ object IcmpPing {
         var inputReader: BufferedReader? = null
         var errorReader: BufferedReader? = null
 
+        val job = coroutineContext[Job]
         try {
             process = Runtime.getRuntime().exec(command.toTypedArray())
             inputReader = BufferedReader(InputStreamReader(process.inputStream))
             errorReader = BufferedReader(InputStreamReader(process.errorStream))
 
-            invokeOnClose {
+            job?.invokeOnCompletion {
                 process?.destroy()
                 process?.waitFor(500, TimeUnit.MILLISECONDS)
                 if (process?.isAlive == true) {
@@ -59,14 +60,10 @@ object IcmpPing {
                     while (isActive) {
                         val line = errorReader?.readLine() ?: break
                         hasOutput = true
-                        val friendlyMsg = when {
-                            line.contains("unknown host", ignoreCase = true) ->
-                                "Ping 请求找不到主机 $host。请检查该名称，然后重试。"
-                            line.contains("Network is unreachable", ignoreCase = true) ->
-                                "网络不可达。"
-                            line.contains("Destination Host Unreachable", ignoreCase = true) ->
-                                "来自 $host 的回复: 目标主机不可达。"
-                            else -> "ERROR: $line"
+                        val friendlyMsg = if (line.startsWith("ping: unknown host")) {
+                            "Ping 请求找不到主机 $host。请检查该名称，然后重试。"
+                        } else {
+                            line
                         }
                         send(friendlyMsg)
                     }
@@ -76,7 +73,7 @@ object IcmpPing {
                 errorJob.join()
                 if (!hasOutput && count > 0) {
                     send("请求超时。")
-                } else if (exitCode != 0 && count > 0) {
+                } else if (exitCode != 0 && count > 0 && !hasOutput) {
                     send("\nPing 命令执行失败，退出码: $exitCode")
                 }
             }
