@@ -1,6 +1,9 @@
 package com.example.nettool
 
-import kotlinx.coroutines.*
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
@@ -13,18 +16,18 @@ object TcpPing {
     fun ping(
         host: String,
         count: Int = 4,
-        packetSize: Int = 56, // 忽略，保留参数统一
+        packetSize: Int = 56,
         port: Int = 80,
         timeout: Int = 2000
     ): Flow<String> = flow {
         val address = try {
             InetAddress.getByName(host)
         } catch (e: Exception) {
-            emit("无法解析主机名: $host")
+            emit("Ping 请求找不到主机 $host。请检查该名称，然后重试。")
             return@flow
         }
 
-        emit("TCPING $host (${address.hostAddress}) port=$port, timeout=${timeout}ms")
+        emit("正在 Ping $host:${port} 具有 32 字节的数据:")
 
         var sequence = 0
         var transmitted = 0
@@ -43,9 +46,9 @@ object TcpPing {
             if (success) {
                 received++
                 times.add(timeMs)
-                emit("Connected to ${address.hostAddress}:$port seq=$sequence time=${round(timeMs).toInt()} ms")
+                emit("来自 ${address.hostAddress}:$port 的回复: 时间=${round(timeMs).toInt()}ms")
             } else {
-                emit("Connection timeout for seq=$sequence")
+                emit("请求超时。")
             }
 
             currentCoroutineContext().ensureActive()
@@ -60,10 +63,10 @@ object TcpPing {
         val max = times.maxOrNull() ?: 0.0
         val avg = times.average().takeUnless { it.isNaN() } ?: 0.0
 
-        emit("--- $host:$port tcping statistics ---")
-        emit("$transmitted probes transmitted, $received received, ${round(loss)}% loss")
+        emit("\n--- $host:$port tcping 统计 ---")
+        emit("发送包数 = $transmitted，接收包数 = $received，丢失 = ${transmitted - received} (${round(loss)}% 丢失)")
         if (received > 0) {
-            emit("rtt min/avg/max = ${round(min)}/${round(avg)}/${round(max)} ms")
+            emit("最短 = ${round(min).toInt()}ms，最长 = ${round(max).toInt()}ms，平均 = ${round(avg).toInt()}ms")
         }
     }.flowOn(Dispatchers.IO)
 

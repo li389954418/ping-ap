@@ -6,62 +6,91 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import java.io.BufferedReader
 import java.io.InputStreamReader
+import java.util.concurrent.TimeUnit
 
 object IcmpPing {
     fun ping(
         host: String,
         count: Int = 4,
         packetSize: Int = 56,
-        timeout: Int = 2000
+        timeout: Int = 2000,
+        interval: Int = 1000
     ): Flow<String> = flow {
-        // 构建命令：当 count == 0 时不加 -c 参数，实现无限 ping
-        val command = buildList {
-            add("ping")
-            if (count > 0) {
-                add("-c")
-                add(count.toString())
-            }
-            add("-s")
-            add(packetSize.toString())
-            add("-W")
-            add((timeout / 1000).toString())
-            add(host)
-        }.toTypedArray()
+        val command = mutableListOf(
+            "ping",
+            "-c", count.toString(),
+            "-s", packetSize.toString(),
+            "-W", (timeout / 1000).toString(),
+            "-i", (interval / 1000.0).toString()
+        )
+        if (count <= 0) {
+            command.removeAll { it.startsWith("-c") }
+        }
+        command.add(host)
+
+        var process: Process? = null
+        var inputReader: BufferedReader? = null
+        var errorReader: BufferedReader? = null
 
         try {
-            val process = Runtime.getRuntime().exec(command)
-            val reader = BufferedReader(InputStreamReader(process.inputStream))
-            val errorReader = BufferedReader(InputStreamReader(process.errorStream))
+            process = Runtime.getRuntime().exec(command.toTypedArray())
+            inputReader = BufferedReader(InputStreamReader(process.inputStream))
+            errorReader = BufferedReader(InputStreamReader(process.errorStream))
 
-            // 获取当前协程的 Job，用于取消时销毁进程
-            val job = currentCoroutineContext()[Job]
-            job?.invokeOnCompletion {
-                process.destroy()
+            currentCoroutineContext().job.invokeOnCompletion {
+                process?.destroy()
+                process?.waitFor(500, TimeUnit.MILLISECONDS)
+                if (process?.isAlive == true) {
+                    process?.destroyForcibly()
+                }
             }
 
-            var line: String?
-            while (reader.readLine().also { line = it } != null) {
-                emit(line ?: "")
-                // 检查协程是否被取消
-                currentCoroutineContext().ensureActive()
-            }
-            while (errorReader.readLine().also { line = it } != null) {
-                emit("ERROR: $line")
-            }
-
-            val exitCode = process.waitFor()
-            reader.close()
-            errorReader.close()
-
-            // 非无限模式且异常退出时给出提示
-            if (exitCode != 0 && count > 0) {
-                emit("Ping 命令退出码: $exitCode")
+            var hasOutput = false
+            coroutineScope {
+                val outputJob = launch(Dispatchers.IO) {
+                    var line: String?
+                    while (isActive && inputReader?.readLine().also { line = it } != null) {
+                        hasOutput = true
+                        emit(line ?: "")
+                    }
+                }
+                val errorJob = launch(Dispatchers.IO) {
+                    var line: String?
+                    while (isActive && errorReader?.readLine().also { line = it } != null) {
+                        hasOutput = true
+                        // 将常见错误转换为 Windows 风格提示
+                        val friendlyMsg = when {
+                            line?.contains("unknown host", ignoreCase = true) == true ->
+                                "Ping 请求找不到主机 $host。请检查该名称，然后重试。"
+                            line?.contains("Network is unreachable", ignoreCase = true) == true ->
+                                "网络不可达。"
+                            line?.contains("Destination Host Unreachable", ignoreCase = true) == true ->
+                                "来自 ${host} 的回复: 目标主机不可达。"
+                            else -> "ERROR: $line"
+                        }
+                        emit(friendlyMsg)
+                    }
+                }
+                val exitCode = withContext(Dispatchers.IO) { process?.waitFor() ?: -1 }
+                outputJob.join()
+                errorJob.join()
+                if (!hasOutput && count > 0) {
+                    emit("请求超时。")
+                } else if (exitCode != 0 && count > 0) {
+                    emit("\nPing 命令执行失败，退出码: $exitCode")
+                }
             }
         } catch (e: CancellationException) {
-            emit("\n--- Ping 已取消 ---")
+            emit("\n--- Ping 已手动取消 ---")
             throw e
         } catch (e: Exception) {
-            emit("ICMP Ping 失败: ${e.message}")
+            emit("ICMP Ping 执行失败: ${e.message ?: "未知错误"}")
+        } finally {
+            withContext(NonCancellable) {
+                inputReader?.close()
+                errorReader?.close()
+                process?.destroyForcibly()
+            }
         }
     }.flowOn(Dispatchers.IO)
 }
