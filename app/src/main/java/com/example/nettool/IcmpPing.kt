@@ -58,7 +58,6 @@ object IcmpPing {
                     var line: String?
                     while (isActive && errorReader?.readLine().also { line = it } != null) {
                         hasOutput = true
-                        // 将常见错误转换为 Windows 风格提示
                         val friendlyMsg = when {
                             line?.contains("unknown host", ignoreCase = true) == true ->
                                 "Ping 请求找不到主机 $host。请检查该名称，然后重试。"
