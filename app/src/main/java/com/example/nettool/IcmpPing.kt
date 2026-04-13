@@ -48,26 +48,28 @@ object IcmpPing {
             var hasOutput = false
             coroutineScope {
                 val outputJob = launch(Dispatchers.IO) {
-                    var line: String?
-                    while (isActive && inputReader?.readLine().also { line = it } != null) {
+                    var line = inputReader?.readLine()
+                    while (isActive && line != null) {
                         hasOutput = true
-                        emit(line ?: "")
+                        emit(line)
+                        line = inputReader?.readLine()
                     }
                 }
                 val errorJob = launch(Dispatchers.IO) {
-                    var line: String?
-                    while (isActive && errorReader?.readLine().also { line = it } != null) {
+                    var line = errorReader?.readLine()
+                    while (isActive && line != null) {
                         hasOutput = true
                         val friendlyMsg = when {
-                            line?.contains("unknown host", ignoreCase = true) == true ->
+                            line.contains("unknown host", ignoreCase = true) ->
                                 "Ping 请求找不到主机 $host。请检查该名称，然后重试。"
-                            line?.contains("Network is unreachable", ignoreCase = true) == true ->
+                            line.contains("Network is unreachable", ignoreCase = true) ->
                                 "网络不可达。"
-                            line?.contains("Destination Host Unreachable", ignoreCase = true) == true ->
+                            line.contains("Destination Host Unreachable", ignoreCase = true) ->
                                 "来自 ${host} 的回复: 目标主机不可达。"
                             else -> "ERROR: $line"
                         }
                         emit(friendlyMsg)
+                        line = errorReader?.readLine()
                     }
                 }
                 val exitCode = withContext(Dispatchers.IO) { process?.waitFor() ?: -1 }
