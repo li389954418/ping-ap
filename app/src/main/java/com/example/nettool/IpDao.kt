@@ -1,16 +1,18 @@
 package com.example.nettool
 
-import androidx.room.Dao
-import androidx.room.Delete
-import androidx.room.Insert
-import androidx.room.Query
-import androidx.room.Update
+import androidx.room.*
 import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface IpDao {
     @Query("SELECT * FROM ip_table ORDER BY id DESC")
     fun getAllEntries(): Flow<List<IpEntry>>
+
+    @Query("SELECT * FROM ip_table WHERE category = :category ORDER BY id DESC")
+    fun getEntriesByCategory(category: String): Flow<List<IpEntry>>
+
+    @Query("SELECT * FROM ip_table")
+    suspend fun getAllEntriesOnce(): List<IpEntry>
 
     @Insert
     suspend fun insert(entry: IpEntry)
