@@ -17,16 +17,22 @@ object IcmpPing {
         timeout: Int = 2000,
         interval: Int = 1000
     ): Flow<String> = channelFlow {
-        val command = mutableListOf(
-            "ping",
-            "-c", count.toString(),
-            "-s", packetSize.toString(),
-            "-W", (timeout / 1000).toString(),
-            "-i", (interval / 1000.0).toString()
-        )
-        if (count <= 0) {
-            command.removeAll { it.startsWith("-c") }
+        val command = mutableListOf("ping")
+
+        if (count > 0) {
+            command.add("-c")
+            command.add(count.toString())
         }
+
+        command.add("-W")
+        command.add((timeout / 1000).toString())
+
+        command.add("-i")
+        command.add((interval / 1000).toString())
+
+        command.add("-s")
+        command.add(packetSize.toString())
+
         command.add(host)
 
         var process: Process? = null
@@ -49,15 +55,15 @@ object IcmpPing {
 
             coroutineScope {
                 val outputJob = launch(Dispatchers.IO) {
-                    while (isActive) {
-                        val line = inputReader?.readLine() ?: break
-                        send(line)
+                    var line: String?
+                    while (inputReader.readLine().also { line = it } != null) {
+                        send(line!!)
                     }
                 }
                 val errorJob = launch(Dispatchers.IO) {
-                    while (isActive) {
-                        val line = errorReader?.readLine() ?: break
-                        send(line)
+                    var line: String?
+                    while (errorReader.readLine().also { line = it } != null) {
+                        send(line!!)
                     }
                 }
                 outputJob.join()
@@ -67,7 +73,7 @@ object IcmpPing {
             send("\n--- Ping 已手动取消 ---")
             throw e
         } catch (e: Exception) {
-            send("ICMP Ping 执行失败: ${e.message ?: "未知错误"}")
+            send("执行异常: ${e.message}")
         } finally {
             withContext(NonCancellable) {
                 inputReader?.close()
