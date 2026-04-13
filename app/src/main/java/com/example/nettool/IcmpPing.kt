@@ -60,6 +60,7 @@ object IcmpPing {
                     while (isActive) {
                         val line = errorReader?.readLine() ?: break
                         hasOutput = true
+                        // 仅对明确的未知主机错误进行友好提示，其他原样输出
                         val friendlyMsg = if (line.startsWith("ping: unknown host")) {
                             "Ping 请求找不到主机 $host。请检查该名称，然后重试。"
                         } else {
