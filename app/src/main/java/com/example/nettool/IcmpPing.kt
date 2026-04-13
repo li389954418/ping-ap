@@ -44,7 +44,6 @@ object IcmpPing {
             inputReader = BufferedReader(InputStreamReader(process.inputStream))
             errorReader = BufferedReader(InputStreamReader(process.errorStream))
 
-            // 协程取消时自动杀进程
             awaitClose {
                 runCatching {
                     process?.destroy()
@@ -55,23 +54,24 @@ object IcmpPing {
                 runCatching { errorReader?.close() }
             }
 
-            // 读取输出
+            // 读取标准输出
             launch(Dispatchers.IO) {
-                var line: String?
-                while (isActive && inputReader.readLine().also { line = it } != null) {
-                    send(line!!)
+                var line = inputReader?.readLine()
+                while (isActive && line != null) {
+                    send(line)
+                    line = inputReader?.readLine()
                 }
             }
 
-            // 读取错误（关键：不可达IP的信息从这里出）
+            // 读取错误输出
             launch(Dispatchers.IO) {
-                var line: String?
-                while (isActive && errorReader.readLine().also { line = it } != null) {
+                var line = errorReader?.readLine()
+                while (isActive && line != null) {
                     send("[错误] $line")
+                    line = errorReader?.readLine()
                 }
             }
 
-            // 等待进程结束
             process?.waitFor(30, TimeUnit.SECONDS)
             send("\n--- Ping 完成 ---")
 
