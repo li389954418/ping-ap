@@ -39,48 +39,46 @@ object IcmpPing {
         var inputReader: BufferedReader? = null
         var errorReader: BufferedReader? = null
 
-        val job = coroutineContext[Job]
         try {
             process = Runtime.getRuntime().exec(command.toTypedArray())
             inputReader = BufferedReader(InputStreamReader(process.inputStream))
             errorReader = BufferedReader(InputStreamReader(process.errorStream))
 
-            job?.invokeOnCompletion {
-                process?.destroy()
-                process?.waitFor(500, TimeUnit.MILLISECONDS)
-                if (process?.isAlive == true) {
-                    process?.destroyForcibly()
+            // 协程取消时自动杀进程
+            awaitClose {
+                runCatching {
+                    process?.destroy()
+                    process?.waitFor(300, TimeUnit.MILLISECONDS)
+                    if (process?.isAlive == true) process?.destroyForcibly()
+                }
+                runCatching { inputReader?.close() }
+                runCatching { errorReader?.close() }
+            }
+
+            // 读取输出
+            launch(Dispatchers.IO) {
+                var line: String?
+                while (isActive && inputReader.readLine().also { line = it } != null) {
+                    send(line!!)
                 }
             }
 
-            coroutineScope {
-                val outputJob = launch(Dispatchers.IO) {
-                    var line: String?
-                    while (inputReader.readLine().also { line = it } != null) {
-                        send(line!!)
-                    }
+            // 读取错误（关键：不可达IP的信息从这里出）
+            launch(Dispatchers.IO) {
+                var line: String?
+                while (isActive && errorReader.readLine().also { line = it } != null) {
+                    send("[错误] $line")
                 }
-                val errorJob = launch(Dispatchers.IO) {
-                    var line: String?
-                    while (errorReader.readLine().also { line = it } != null) {
-                        send(line!!)
-                    }
-                }
-                outputJob.join()
-                errorJob.join()
             }
+
+            // 等待进程结束
+            process?.waitFor(30, TimeUnit.SECONDS)
+            send("\n--- Ping 完成 ---")
+
         } catch (e: CancellationException) {
-            send("\n--- Ping 已手动取消 ---")
-            throw e
+            send("\n--- 已手动停止 ---")
         } catch (e: Exception) {
-            send("执行异常: ${e.message}")
-        } finally {
-            withContext(NonCancellable) {
-                inputReader?.close()
-                errorReader?.close()
-                process?.destroyForcibly()
-            }
+            send("\n异常：${e.message ?: "未知错误"}")
         }
-        awaitClose()
     }.flowOn(Dispatchers.IO)
 }
