@@ -1,8 +1,9 @@
 package com.example.nettool
 
 import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.flowOn
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -15,7 +16,7 @@ object IcmpPing {
         packetSize: Int = 56,
         timeout: Int = 2000,
         interval: Int = 1000
-    ): Flow<String> = flow {
+    ): Flow<String> = channelFlow {
         val command = mutableListOf(
             "ping",
             "-c", count.toString(),
@@ -37,7 +38,7 @@ object IcmpPing {
             inputReader = BufferedReader(InputStreamReader(process.inputStream))
             errorReader = BufferedReader(InputStreamReader(process.errorStream))
 
-            currentCoroutineContext().job.invokeOnCompletion {
+            invokeOnClose {
                 process?.destroy()
                 process?.waitFor(500, TimeUnit.MILLISECONDS)
                 if (process?.isAlive == true) {
@@ -48,16 +49,15 @@ object IcmpPing {
             var hasOutput = false
             coroutineScope {
                 val outputJob = launch(Dispatchers.IO) {
-                    var line = inputReader?.readLine()
-                    while (isActive && line != null) {
+                    while (isActive) {
+                        val line = inputReader?.readLine() ?: break
                         hasOutput = true
-                        emit(line)
-                        line = inputReader?.readLine()
+                        send(line)
                     }
                 }
                 val errorJob = launch(Dispatchers.IO) {
-                    var line = errorReader?.readLine()
-                    while (isActive && line != null) {
+                    while (isActive) {
+                        val line = errorReader?.readLine() ?: break
                         hasOutput = true
                         val friendlyMsg = when {
                             line.contains("unknown host", ignoreCase = true) ->
@@ -65,27 +65,26 @@ object IcmpPing {
                             line.contains("Network is unreachable", ignoreCase = true) ->
                                 "网络不可达。"
                             line.contains("Destination Host Unreachable", ignoreCase = true) ->
-                                "来自 ${host} 的回复: 目标主机不可达。"
+                                "来自 $host 的回复: 目标主机不可达。"
                             else -> "ERROR: $line"
                         }
-                        emit(friendlyMsg)
-                        line = errorReader?.readLine()
+                        send(friendlyMsg)
                     }
                 }
                 val exitCode = withContext(Dispatchers.IO) { process?.waitFor() ?: -1 }
                 outputJob.join()
                 errorJob.join()
                 if (!hasOutput && count > 0) {
-                    emit("请求超时。")
+                    send("请求超时。")
                 } else if (exitCode != 0 && count > 0) {
-                    emit("\nPing 命令执行失败，退出码: $exitCode")
+                    send("\nPing 命令执行失败，退出码: $exitCode")
                 }
             }
         } catch (e: CancellationException) {
-            emit("\n--- Ping 已手动取消 ---")
+            send("\n--- Ping 已手动取消 ---")
             throw e
         } catch (e: Exception) {
-            emit("ICMP Ping 执行失败: ${e.message ?: "未知错误"}")
+            send("ICMP Ping 执行失败: ${e.message ?: "未知错误"}")
         } finally {
             withContext(NonCancellable) {
                 inputReader?.close()
@@ -93,5 +92,6 @@ object IcmpPing {
                 process?.destroyForcibly()
             }
         }
+        awaitClose()
     }.flowOn(Dispatchers.IO)
 }
