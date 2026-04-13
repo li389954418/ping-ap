@@ -47,36 +47,21 @@ object IcmpPing {
                 }
             }
 
-            var hasOutput = false
             coroutineScope {
                 val outputJob = launch(Dispatchers.IO) {
                     while (isActive) {
                         val line = inputReader?.readLine() ?: break
-                        hasOutput = true
                         send(line)
                     }
                 }
                 val errorJob = launch(Dispatchers.IO) {
                     while (isActive) {
                         val line = errorReader?.readLine() ?: break
-                        hasOutput = true
-                        // 仅对明确的未知主机错误进行友好提示，其他原样输出
-                        val friendlyMsg = if (line.startsWith("ping: unknown host")) {
-                            "Ping 请求找不到主机 $host。请检查该名称，然后重试。"
-                        } else {
-                            line
-                        }
-                        send(friendlyMsg)
+                        send(line)
                     }
                 }
-                val exitCode = withContext(Dispatchers.IO) { process?.waitFor() ?: -1 }
                 outputJob.join()
                 errorJob.join()
-                if (!hasOutput && count > 0) {
-                    send("请求超时。")
-                } else if (exitCode != 0 && count > 0 && !hasOutput) {
-                    send("\nPing 命令执行失败，退出码: $exitCode")
-                }
             }
         } catch (e: CancellationException) {
             send("\n--- Ping 已手动取消 ---")
