@@ -14,16 +14,19 @@ object IcmpPing {
         packetSize: Int = 56,
         timeout: Int = 2000
     ): Flow<String> = flow {
-        val command = listOf(
-            "ping",
-            "-c", if (count == 0) "0" else count.toString(),
-            "-s", packetSize.toString(),
-            "-W", (timeout / 1000).toString(),
-            host
-        ).toTypedArray()
+        val command = mutableListOf("ping")
+        if (count > 0) {
+            command.add("-c")
+            command.add(count.toString())
+        }
+        command.add("-s")
+        command.add(packetSize.toString())
+        command.add("-W")
+        command.add((timeout / 1000).toString())
+        command.add(host)
 
         try {
-            val process = Runtime.getRuntime().exec(command)
+            val process = Runtime.getRuntime().exec(command.toTypedArray())
             val reader = BufferedReader(InputStreamReader(process.inputStream))
             val errorReader = BufferedReader(InputStreamReader(process.errorStream))
 
