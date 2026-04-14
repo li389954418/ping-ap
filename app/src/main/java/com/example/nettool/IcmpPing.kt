@@ -47,42 +47,44 @@ object IcmpPing {
             }
 
             var hasOutput = false
-            // 启动超时监控
-            val timeoutJob = withContext(Dispatchers.IO) {
-                launch {
-                    delay(10000L)
-                    if (!hasOutput && count > 0) {
-                        process?.destroyForcibly()
-                    }
+            // 读取输出和错误流的协程
+            val outputJob = GlobalScope.launch(Dispatchers.IO) {
+                var line = inputReader?.readLine()
+                while (line != null) {
+                    hasOutput = true
+                    emit(line)
+                    line = inputReader?.readLine()
+                }
+            }
+            val errorJob = GlobalScope.launch(Dispatchers.IO) {
+                var line = errorReader?.readLine()
+                while (line != null) {
+                    hasOutput = true
+                    emit(line)
+                    line = errorReader?.readLine()
                 }
             }
 
-            withContext(Dispatchers.IO) {
-                val outputJob = launch {
-                    var line: String?
-                    while (isActive && inputReader?.readLine().also { line = it } != null) {
-                        hasOutput = true
-                        emit(line!!)
-                    }
+            // 等待进程结束或超时
+            val exitCode = try {
+                withTimeoutOrNull(10000L) {
+                    process?.waitFor()
+                } ?: run {
+                    process?.destroyForcibly()
+                    -1
                 }
-                val errorJob = launch {
-                    var line: String?
-                    while (isActive && errorReader?.readLine().also { line = it } != null) {
-                        hasOutput = true
-                        emit(line!!)
-                    }
-                }
+            } catch (e: Exception) {
+                process?.destroyForcibly()
+                -1
+            }
 
-                val exitCode = process?.waitFor() ?: -1
-                timeoutJob.cancel()
-                outputJob.join()
-                errorJob.join()
+            outputJob.join()
+            errorJob.join()
 
-                if (!hasOutput && count > 0) {
-                    emit("请求超时或目标不可达。")
-                } else if (exitCode != 0 && count > 0) {
-                    emit("Ping 命令退出码: $exitCode")
-                }
+            if (!hasOutput && count > 0) {
+                emit("请求超时或目标不可达。")
+            } else if (exitCode != null && exitCode != 0 && count > 0) {
+                emit("Ping 命令退出码: $exitCode")
             }
         } catch (e: CancellationException) {
             emit("\n--- Ping 已手动取消 ---")
