@@ -1,86 +1,96 @@
 package com.example.nettool
 
 import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flowOn
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import java.net.InetAddress
+import com.potterhsu.pinger.Pinger
 import kotlin.math.round
 
 object IcmpPing {
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(2, java.util.concurrent.TimeUnit.SECONDS)
-        .readTimeout(2, java.util.concurrent.TimeUnit.SECONDS)
-        .build()
-
     fun ping(
         host: String,
         count: Int = 4,
         packetSize: Int = 56,
         timeout: Int = 2000
-    ): Flow<String> = flow {
-        emit("正在 Ping $host (使用 TCP 探测)")
-
+    ): Flow<String> = callbackFlow {
+        val pinger = Pinger()
         var sequence = 0
         var transmitted = 0
         var received = 0
         val times = mutableListOf<Double>()
+        var startTime = 0L
 
-        // 尝试解析为 IP，如果已经是 IP 则直接使用，否则尝试通过 HTTP 连接测通断
-        val address = try {
-            InetAddress.getByName(host)
-        } catch (e: Exception) {
-            null
-        }
+        emit("正在 Ping $host 具有 32 字节的数据:")
 
-        while (count == 0 || sequence < count) {
-            sequence++
-            transmitted++
-
-            currentCoroutineContext().ensureActive()
-
-            val start = System.nanoTime()
-            val success = try {
-                if (address != null) {
-                    address.isReachable(timeout)
-                } else {
-                    // 对于域名，尝试 HEAD 请求测通断
-                    val request = Request.Builder()
-                        .url("http://$host")
-                        .head()
-                        .build()
-                    client.newCall(request).execute().use { it.isSuccessful }
+        pinger.setOnPingListener(object : Pinger.OnPingListener {
+            override fun onPingSuccess() {
+                transmitted++
+                val seq = ++sequence
+                if (startTime > 0) {
+                    val rtt = System.currentTimeMillis() - startTime
+                    times.add(rtt.toDouble())
+                    received++
+                    trySend("来自 $host 的回复: 字节=32 时间=${rtt}ms TTL=?? (seq=$seq)")
                 }
-            } catch (e: Exception) {
-                false
-            }
-            val timeMs = (System.nanoTime() - start) / 1_000_000.0
+                startTime = 0
 
-            if (success) {
-                received++
-                times.add(timeMs)
-                emit("来自 $host 的回复: 时间=${round(timeMs).toInt()}ms")
-            } else {
-                emit("请求超时。")
+                // 检查是否达到指定次数
+                if (count > 0 && transmitted >= count) {
+                    finishPing()
+                } else {
+                    // 继续下一次 ping
+                    startTime = System.currentTimeMillis()
+                    pinger.ping(host, 1)
+                }
             }
 
-            if (count == 0 || sequence < count) {
-                delay(1000)
+            override fun onPingFailure() {
+                transmitted++
+                sequence++
+                trySend("请求超时。")
+                startTime = 0
+
+                if (count > 0 && transmitted >= count) {
+                    finishPing()
+                } else {
+                    startTime = System.currentTimeMillis()
+                    pinger.ping(host, 1)
+                }
             }
+
+            override fun onPingFinish() {
+                // 由 finishPing 处理
+            }
+
+            private fun finishPing() {
+                val loss = if (transmitted > 0) (transmitted - received) * 100.0 / transmitted else 0.0
+                val min = times.minOrNull() ?: 0.0
+                val max = times.maxOrNull() ?: 0.0
+                val avg = times.average().takeUnless { it.isNaN() } ?: 0.0
+
+                trySend("")
+                trySend("--- $host ping 统计 ---")
+                trySend("发送包数 = $transmitted，接收包数 = $received，丢失 = ${transmitted - received} (${round(loss)}% 丢失)")
+                if (received > 0) {
+                    trySend("最短 = ${round(min).toInt()}ms，最长 = ${round(max).toInt()}ms，平均 = ${round(avg).toInt()}ms")
+                }
+                close()
+            }
+        })
+
+        // 开始第一次 ping
+        startTime = System.currentTimeMillis()
+        if (count > 0) {
+            pinger.ping(host, 1)
+        } else {
+            // 无限 ping 模式：持续 ping 直到协程被取消
+            pinger.pingUntilSucceeded(host, 0)
         }
 
-        val loss = if (transmitted > 0) (transmitted - received) * 100.0 / transmitted else 0.0
-        val min = times.minOrNull() ?: 0.0
-        val max = times.maxOrNull() ?: 0.0
-        val avg = times.average().takeUnless { it.isNaN() } ?: 0.0
-
-        emit("")
-        emit("--- $host ping 统计 ---")
-        emit("发送包数 = $transmitted，接收包数 = $received，丢失 = ${transmitted - received} (${round(loss)}% 丢失)")
-        if (received > 0) {
-            emit("最短 = ${round(min).toInt()}ms，最长 = ${round(max).toInt()}ms，平均 = ${round(avg).toInt()}ms")
+        awaitClose {
+            pinger.setOnPingListener(null)
         }
     }.flowOn(Dispatchers.IO)
 }

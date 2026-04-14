@@ -13,8 +13,8 @@ android {
         applicationId = "com.example.nettool"
         minSdk = 24
         targetSdk = 34
-        versionCode = 13
-        versionName = "1.6.0"
+        versionCode = 14
+        versionName = "1.7.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -52,7 +52,7 @@ android {
 }
 
 dependencies {
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.github.potterhsu:Pinger:v1.1")
     val composeBom = platform("androidx.compose:compose-bom:2024.02.00")
     implementation(composeBom)
     androidTestImplementation(composeBom)
