@@ -22,7 +22,7 @@ object IcmpPing {
         val times = mutableListOf<Double>()
         var startTime = 0L
 
-        emit("正在 Ping $host 具有 32 字节的数据:")
+        trySend("正在 Ping $host 具有 32 字节的数据:")
 
         pinger.setOnPingListener(object : Pinger.OnPingListener {
             override fun onPingSuccess() {
@@ -32,15 +32,13 @@ object IcmpPing {
                     val rtt = System.currentTimeMillis() - startTime
                     times.add(rtt.toDouble())
                     received++
-                    trySend("来自 $host 的回复: 字节=32 时间=${rtt}ms TTL=?? (seq=$seq)")
+                    trySend("来自 $host 的回复: 字节=32 时间=${rtt}ms (seq=$seq)")
                 }
                 startTime = 0
 
-                // 检查是否达到指定次数
                 if (count > 0 && transmitted >= count) {
                     finishPing()
                 } else {
-                    // 继续下一次 ping
                     startTime = System.currentTimeMillis()
                     pinger.ping(host, 1)
                 }
@@ -61,7 +59,7 @@ object IcmpPing {
             }
 
             override fun onPingFinish() {
-                // 由 finishPing 处理
+                // 通常由成功或失败后手动完成，此处保留
             }
 
             private fun finishPing() {
@@ -80,12 +78,10 @@ object IcmpPing {
             }
         })
 
-        // 开始第一次 ping
         startTime = System.currentTimeMillis()
         if (count > 0) {
             pinger.ping(host, 1)
         } else {
-            // 无限 ping 模式：持续 ping 直到协程被取消
             pinger.pingUntilSucceeded(host, 0)
         }
 
