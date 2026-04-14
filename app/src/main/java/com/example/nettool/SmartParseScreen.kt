@@ -44,11 +44,11 @@ fun SmartParseScreen(
 
     var remarkItems by remember { mutableStateOf(listOf<Pair<String, String>>()) }
 
-    // 重复检测弹窗
     var duplicateData by remember { mutableStateOf<Triple<IpEntry, IpEntry, TemplateEntry>?>(null) }
     var showDuplicateDialog by remember { mutableStateOf(false) }
 
     val categories by viewModel.categories.collectAsState(initial = emptyList())
+    val templates by viewModel.templates.collectAsState(initial = emptyList())
     var categoryExpanded by remember { mutableStateOf(false) }
 
     fun startEditing(entry: IpEntry) {
@@ -89,9 +89,8 @@ fun SmartParseScreen(
                 category = selectedCategory
             )
 
-            // 获取当前启用的模板，进行去重检测
             scope.launch {
-                val enabledTemplates = viewModel.templates.value.filter { it.enabled }
+                val enabledTemplates = templates.filter { it.enabled }
                 val template = enabledTemplates.firstOrNull()
                 if (template != null) {
                     val duplicate = viewModel.findDuplicateEntryByTemplate(updatedEntry, template)
@@ -101,7 +100,6 @@ fun SmartParseScreen(
                         return@launch
                     }
                 }
-                // 无重复，直接保存
                 viewModel.batchSaveEntries(listOf(updatedEntry))
                 if (closeAfter) {
                     showConfirmDialog = false
@@ -207,7 +205,6 @@ fun SmartParseScreen(
                 onClick = {
                     isProcessing = true
                     previewEntries = viewModel.autoParseAndPreview(inputText, selectedCategory)
-                    val enabledTemplates = viewModel.templates.value.filter { it.enabled }
                     isProcessing = false
                     if (previewEntries.isNotEmpty()) {
                         startEditing(previewEntries.first())
@@ -255,7 +252,6 @@ fun SmartParseScreen(
         Spacer(modifier = Modifier.height(16.dp))
     }
 
-    // 智能解析确认对话框
     if (showConfirmDialog && editingEntry != null) {
         EditEntryDialog(
             entry = editingEntry!!, mainRemark = mainRemark, onMainRemarkChange = { mainRemark = it },
@@ -267,7 +263,6 @@ fun SmartParseScreen(
         )
     }
 
-    // 快速添加对话框
     if (showQuickAddDialog && editingEntry != null) {
         EditEntryDialog(
             entry = editingEntry!!, mainRemark = mainRemark, onMainRemarkChange = { mainRemark = it },
@@ -279,7 +274,6 @@ fun SmartParseScreen(
         )
     }
 
-    // 重复处理对话框
     if (showDuplicateDialog && duplicateData != null) {
         val (oldEntry, newEntry, template) = duplicateData!!
         AlertDialog(
