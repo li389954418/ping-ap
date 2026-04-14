@@ -48,25 +48,25 @@ object IcmpPing {
             }
 
             var hasOutput = false
-            // 读取输出和错误流的协程
+            
             val outputJob = launch(Dispatchers.IO) {
-                var line = inputReader?.readLine()
+                var line = inputReader.readLine()
                 while (line != null) {
                     hasOutput = true
                     send(line)
-                    line = inputReader?.readLine()
+                    line = inputReader.readLine()
                 }
             }
+            
             val errorJob = launch(Dispatchers.IO) {
-                var line = errorReader?.readLine()
+                var line = errorReader.readLine()
                 while (line != null) {
                     hasOutput = true
                     send(line)
-                    line = errorReader?.readLine()
+                    line = errorReader.readLine()
                 }
             }
 
-            // 等待进程结束或超时
             val exitCode = try {
                 withTimeoutOrNull(10000L) {
                     process?.waitFor()
@@ -83,15 +83,15 @@ object IcmpPing {
             errorJob.join()
 
             if (!hasOutput && count > 0) {
-                send("请求超时或目标不可达。")
+                send("请求超时或目标不可达")
             } else if (exitCode != null && exitCode != 0 && count > 0) {
-                send("Ping 命令退出码: $exitCode")
+                send("Ping 命令异常，退出码: $exitCode")
             }
         } catch (e: CancellationException) {
-            send("\n--- Ping 已手动取消 ---")
+            send("--- Ping 已手动取消 ---")
             throw e
         } catch (e: Exception) {
-            send("ICMP Ping 异常: ${e.message}")
+            send("Ping 错误: ${e.message ?: "未知异常"}")
         } finally {
             withContext(NonCancellable) {
                 inputReader?.close()
