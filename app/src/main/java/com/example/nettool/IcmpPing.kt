@@ -32,51 +32,49 @@ object IcmpPing {
         var errorJob: Job? = null
 
         try {
-            // 1. 启动进程
             process = Runtime.getRuntime().exec(command)
 
-            // 2. 创建读取任务
             val inputStream = InputStreamReader(process.inputStream)
             val errorStream = InputStreamReader(process.errorStream)
 
-            // 3. 读取标准输出
+            // 3. 读取标准输出（修正版）
             outputJob = launch(Dispatchers.IO) {
                 BufferedReader(inputStream).use { reader ->
-                    var line: String?
-                    while (isActive && (reader.readLine().also { line = it }) != null) {
-                        send(line!!)
+                    var line: String? = null
+                    line = reader.readLine()
+                    while (isActive && line != null) {
+                        send(line)
+                        line = reader.readLine()
                     }
                 }
             }
 
-            // 4. 读取错误输出（关键：防止缓冲区阻塞）
+            // 4. 读取错误输出（修正版）
             errorJob = launch(Dispatchers.IO) {
                 BufferedReader(errorStream).use { reader ->
-                    var line: String?
-                    while (isActive && (reader.readLine().also { line = it }) != null) {
-                        send(line!!)
+                    var line: String? = null
+                    line = reader.readLine()
+                    while (isActive && line != null) {
+                        send(line)
+                        line = reader.readLine()
                     }
                 }
             }
 
-            // 5. 异步等待进程结束，防止阻塞协程
+            // 异步等待进程结束
             val waitForJob = launch {
                 try {
-                    // 等待进程结束，或者被协程取消
-                    val exitCode = withTimeout(10_000) { // 总超时保护
+                    val exitCode = withTimeout(10_000) {
                         process.waitFor()
                     }
                     
-                    // 进程结束后，确保读取完剩余数据
                     outputJob?.join()
                     errorJob?.join()
                     
-                    // 发送结束信号或状态
                     if (exitCode != 0) {
                         send("Ping 结束，退出码: $exitCode")
                     }
                 } catch (e: CancellationException) {
-                    // 协程被取消时，强制结束进程
                     process.destroyForcibly()
                     send("--- Ping 已停止 ---")
                 } catch (e: Exception) {
@@ -85,7 +83,7 @@ object IcmpPing {
                 }
             }
 
-            // 6. 监听协程取消，主动销毁进程
+            // 监听协程取消
             awaitClose {
                 waitForJob.cancel()
                 process.destroyForcibly()
