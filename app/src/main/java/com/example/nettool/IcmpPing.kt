@@ -2,7 +2,7 @@ package com.example.nettool
 
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -15,7 +15,7 @@ object IcmpPing {
         packetSize: Int = 56,
         timeout: Int = 2000,
         interval: Int = 1000
-    ): Flow<String> = channelFlow {
+    ): Flow<String> = flow {
         val command = mutableListOf("ping")
 
         if (count > 0) {
@@ -38,45 +38,47 @@ object IcmpPing {
         var inputReader: BufferedReader? = null
         var errorReader: BufferedReader? = null
 
+        val job = currentCoroutineContext()[Job]
         try {
             process = Runtime.getRuntime().exec(command.toTypedArray())
             inputReader = BufferedReader(InputStreamReader(process.inputStream))
             errorReader = BufferedReader(InputStreamReader(process.errorStream))
 
-            // 协程取消时销毁进程
-            awaitClose {
+            job?.invokeOnCompletion {
                 process?.destroy()
-                process?.waitFor(300, TimeUnit.MILLISECONDS)
-                if (process?.isAlive == true) process?.destroyForcibly()
+                process?.waitFor(500, TimeUnit.MILLISECONDS)
+                if (process?.isAlive == true) {
+                    process?.destroyForcibly()
+                }
+            }
+
+            coroutineScope {
+                val outputJob = launch(Dispatchers.IO) {
+                    var line: String?
+                    while (inputReader.readLine().also { line = it } != null) {
+                        emit(line!!)
+                    }
+                }
+                val errorJob = launch(Dispatchers.IO) {
+                    var line: String?
+                    while (errorReader.readLine().also { line = it } != null) {
+                        emit(line!!)
+                    }
+                }
+                outputJob.join()
+                errorJob.join()
+            }
+        } catch (e: CancellationException) {
+            emit("\n--- 已手动停止 ---")
+            throw e
+        } catch (e: Exception) {
+            emit("\n执行异常：${e.message ?: "未知错误"}")
+        } finally {
+            withContext(NonCancellable) {
                 inputReader?.close()
                 errorReader?.close()
+                process?.destroyForcibly()
             }
-
-            // 读取标准输出
-            launch(Dispatchers.IO) {
-                inputReader.use { reader ->
-                    reader.lines().forEach { line ->
-                        send(line)
-                    }
-                }
-            }
-
-            // 读取错误输出
-            launch(Dispatchers.IO) {
-                errorReader.use { reader ->
-                    reader.lines().forEach { line ->
-                        send(line)
-                    }
-                }
-            }
-
-            process?.waitFor(30, TimeUnit.SECONDS)
-            send("\n--- Ping 完成 ---")
-
-        } catch (e: CancellationException) {
-            send("\n--- 已手动停止 ---")
-        } catch (e: Exception) {
-            send("\n异常：${e.message ?: "未知错误"}")
         }
     }.flowOn(Dispatchers.IO)
 }
