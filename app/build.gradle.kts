@@ -52,7 +52,7 @@ android {
 }
 
 dependencies {
-    implementation("com.github.petrbouda:icmp4j:1.0.0")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
     val composeBom = platform("androidx.compose:compose-bom:2024.02.00")
     implementation(composeBom)
     androidTestImplementation(composeBom)

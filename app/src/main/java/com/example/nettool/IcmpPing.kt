@@ -4,38 +4,36 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
-<<<<<<< HEAD
-import icmp4j.Icmp4j
-import icmp4j.IcmpPingRequest
-import icmp4j.IcmpPingResponse
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import java.net.InetAddress
 import kotlin.math.round
-=======
-import java.io.BufferedReader
-import java.io.InputStreamReader
->>>>>>> b2a7d519900564732ff668a4801582e1fa3450dc
 
 object IcmpPing {
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(2, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(2, java.util.concurrent.TimeUnit.SECONDS)
+        .build()
+
     fun ping(
         host: String,
         count: Int = 4,
         packetSize: Int = 56,
         timeout: Int = 2000
     ): Flow<String> = flow {
-<<<<<<< HEAD
-        val icmp = Icmp4j()
-        val request = IcmpPingRequest().apply {
-            this.host = host
-            this.timeout = timeout.toLong()
-            this.packetSize = packetSize
-        }
-
-        emit("正在 Ping $host 具有 $packetSize 字节的数据:")
+        emit("正在 Ping $host (使用 TCP 探测)")
 
         var sequence = 0
         var transmitted = 0
         var received = 0
         val times = mutableListOf<Double>()
+
+        // 尝试解析为 IP，如果已经是 IP 则直接使用，否则尝试通过 HTTP 连接测通断
+        val address = try {
+            InetAddress.getByName(host)
+        } catch (e: Exception) {
+            null
+        }
 
         while (count == 0 || sequence < count) {
             sequence++
@@ -43,74 +41,34 @@ object IcmpPing {
 
             currentCoroutineContext().ensureActive()
 
-            val response: IcmpPingResponse = withContext(Dispatchers.IO) {
-                icmp.execute(request)
+            val start = System.nanoTime()
+            val success = try {
+                if (address != null) {
+                    address.isReachable(timeout)
+                } else {
+                    // 对于域名，尝试 HEAD 请求测通断
+                    val request = Request.Builder()
+                        .url("http://$host")
+                        .head()
+                        .build()
+                    client.newCall(request).execute().use { it.isSuccessful }
+                }
+            } catch (e: Exception) {
+                false
             }
+            val timeMs = (System.nanoTime() - start) / 1_000_000.0
 
-            val timeMs = response.rtt?.toDouble() ?: 0.0
-            val ttl = response.ttl ?: 0
-
-            if (response.success) {
+            if (success) {
                 received++
                 times.add(timeMs)
-                emit("来自 ${response.host} 的回复: 字节=32 时间=${round(timeMs).toInt()}ms TTL=$ttl")
+                emit("来自 $host 的回复: 时间=${round(timeMs).toInt()}ms")
             } else {
-                when {
-                    response.timeout -> emit("请求超时。")
-                    response.errorMessage != null -> emit("错误: ${response.errorMessage}")
-                    else -> emit("目标不可达。")
-                }
+                emit("请求超时。")
             }
 
             if (count == 0 || sequence < count) {
                 delay(1000)
             }
-=======
-        val command = buildList {
-            add("ping")
-            if (count > 0) {
-                add("-c")
-                add(count.toString())
-            }
-            add("-s")
-            add(packetSize.toString())
-            add("-W")
-            add((timeout / 1000).toString())
-            add(host)
-        }.toTypedArray()
-
-        try {
-            val process = Runtime.getRuntime().exec(command)
-            val reader = BufferedReader(InputStreamReader(process.inputStream))
-            val errorReader = BufferedReader(InputStreamReader(process.errorStream))
-
-            val job = currentCoroutineContext()[Job]
-            job?.invokeOnCompletion {
-                process.destroy()
-            }
-
-            var line: String?
-            while (reader.readLine().also { line = it } != null) {
-                emit(line ?: "")
-                currentCoroutineContext().ensureActive()
-            }
-            while (errorReader.readLine().also { line = it } != null) {
-                emit("ERROR: $line")
-            }
-
-            val exitCode = process.waitFor()
-            reader.close()
-            errorReader.close()
-
-            if (exitCode != 0 && count > 0) {
-                emit("Ping 命令退出码: $exitCode")
-            }
-        } catch (e: CancellationException) {
-            emit("\n--- Ping 已取消 ---")
-            throw e
-        } catch (e: Exception) {
-            emit("ICMP Ping 失败: ${e.message}")
->>>>>>> b2a7d519900564732ff668a4801582e1fa3450dc
         }
 
         val loss = if (transmitted > 0) (transmitted - received) * 100.0 / transmitted else 0.0
