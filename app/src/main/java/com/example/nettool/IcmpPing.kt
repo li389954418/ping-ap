@@ -46,29 +46,28 @@ object IcmpPing {
 
             var hasOutput = false
             val startTime = System.currentTimeMillis()
-            val maxWaitTime = if (count > 0) count * 3000L + 5000 else 30000L // 至少等待30秒或按次数估算
+            val maxWaitTime = if (count > 0) count * 3000L + 5000 else 30000L
 
-            // 并行读取标准输出和错误输出
             coroutineScope {
                 val outputJob = launch(Dispatchers.IO) {
-                    var line: String?
-                    while (isActive && inputReader?.readLine().also { line = it } != null) {
+                    var line: String? = inputReader?.readLine()
+                    while (isActive && line != null) {
                         hasOutput = true
-                        emit(line ?: "")
+                        emit(line)
+                        line = inputReader?.readLine()
                     }
                 }
                 val errorJob = launch(Dispatchers.IO) {
-                    var line: String?
-                    while (isActive && errorReader?.readLine().also { line = it } != null) {
+                    var line: String? = errorReader?.readLine()
+                    while (isActive && line != null) {
                         hasOutput = true
-                        emit(line ?: "")
+                        emit(line)
+                        line = errorReader?.readLine()
                     }
                 }
 
-                // 等待进程结束或超时
                 val exitCode = withContext(Dispatchers.IO) {
                     if (process?.waitFor(maxWaitTime, TimeUnit.MILLISECONDS) == false) {
-                        // 超时，强制销毁
                         process?.destroyForcibly()
                         -1
                     } else {
@@ -81,7 +80,6 @@ object IcmpPing {
                 outputJob.join()
                 errorJob.join()
 
-                // 如果完全没有输出且退出码非零，给出提示
                 if (!hasOutput && count > 0) {
                     emit("请求超时或目标不可达。")
                 } else if (exitCode != 0 && count > 0) {
