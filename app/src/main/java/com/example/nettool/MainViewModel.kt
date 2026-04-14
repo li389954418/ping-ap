@@ -364,8 +364,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         // keep 字段不做处理，保留旧值
 
         return oldEntry.copy(
-            name = if (replaceFields.toString().contains(""name"")) newEntry.name.ifBlank { oldEntry.name } else oldEntry.name,
-            address = if (replaceFields.toString().contains(""address"")) newEntry.address.ifBlank { oldEntry.address } else oldEntry.address,
             extraRemarks = oldJson.toString(),
             category = newEntry.category,
             updatedAt = System.currentTimeMillis()
