@@ -1,31 +1,22 @@
 package com.example.nettool
-
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.json.JSONArray
 import org.json.JSONObject
-
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val db = AppDatabase.getInstance(application)
     private val allEntries = db.ipDao().getAllEntries()
     private val allTemplates = db.templateDao().getAllTemplates()
-
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery
-
     private val fixedCategories = listOf("全部", "互联网", "医保/供水专线", "IMS", "数据专线")
     val categories: StateFlow<List<String>> = MutableStateFlow(fixedCategories)
-
     private val _selectedCategory = MutableStateFlow("全部")
     val selectedCategory: StateFlow<String> = _selectedCategory
-
     val entries = combine(allEntries, _searchQuery, _selectedCategory) { list, query, category ->
         val filtered = when (category) {
             "全部" -> list
@@ -43,57 +34,43 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: Exception) { false })
         }
     }
-
     val templates = allTemplates
-
     private val _pingResult = MutableStateFlow("")
     val pingResult: StateFlow<String> = _pingResult
-
     private val _selectedAddress = MutableStateFlow("")
     val selectedAddress: StateFlow<String> = _selectedAddress
-
     private val _autoPingAddress = MutableStateFlow("")
     val autoPingAddress: StateFlow<String> = _autoPingAddress
-
     private val _editingTargetId = MutableStateFlow<Int?>(null)
     val editingTargetId: StateFlow<Int?> = _editingTargetId
-
     fun updateSearchQuery(query: String) { _searchQuery.value = query }
     fun setSelectedCategory(category: String) { _selectedCategory.value = category }
-
     fun addEntry(name: String, address: String, extraRemarks: String = "{}", category: String = "互联网") {
         viewModelScope.launch {
             db.ipDao().insert(IpEntry(name = name, address = address, extraRemarks = extraRemarks, category = category))
         }
     }
-
     fun updateEntry(entry: IpEntry) {
         viewModelScope.launch { db.ipDao().update(entry) }
     }
-
     fun deleteEntry(entry: IpEntry) {
         viewModelScope.launch { db.ipDao().delete(entry) }
     }
-
     fun addTemplate(template: TemplateEntry) {
         viewModelScope.launch { db.templateDao().insert(template) }
     }
-
     fun updateTemplate(template: TemplateEntry) {
         viewModelScope.launch { db.templateDao().update(template) }
     }
-
     fun deleteTemplate(template: TemplateEntry) {
         viewModelScope.launch { db.templateDao().delete(template) }
     }
-
     fun isCategoryAllowPing(category: String): Boolean {
         return when (category) {
             "医保/供水专线", "IMS", "数据专线" -> false
             else -> true
         }
     }
-
     fun pingAddress(address: String) {
         viewModelScope.launch {
             _pingResult.value = "正在 Ping $address ...\n"
@@ -106,17 +83,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
     }
-
     fun setSelectedAddress(address: String) { _selectedAddress.value = address }
     fun triggerAutoPing(address: String) {
         _autoPingAddress.value = address
         _selectedAddress.value = address
     }
     fun clearAutoPing() { _autoPingAddress.value = "" }
-
     fun requestEditEntry(id: Int) { _editingTargetId.value = id }
     fun clearEditingTarget() { _editingTargetId.value = null }
-
     fun autoClassify(address: String): String {
         return when {
             address.isBlank() -> "医保/供水专线"
@@ -124,15 +98,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             else -> "互联网"
         }
     }
-
     fun autoParseAndPreview(text: String, targetCategory: String = "互联网"): List<IpEntry> {
         val enabledTemplates = runBlocking { db.templateDao().getEnabledTemplates().firstOrNull() ?: emptyList() }
         if (enabledTemplates.isEmpty()) return emptyList()
-
         val addressCandidates = mutableListOf<String>()
         val nameCandidates = mutableListOf<String>()
         val remarkMap = mutableMapOf<String, MutableList<String>>()
-
         for (template in enabledTemplates) {
             try {
                 val rulesArray = JSONArray(template.rulesJson)
@@ -140,18 +111,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     val rule = rulesArray.getJSONObject(i)
                     val keyword = rule.getString("keyword")
                     val targetField = rule.getString("targetField")
-                    val extractUntil = rule.optString("extractUntil", "line")
-
-                    var searchStart = 0
-                    while (searchStart < text.length) {
-                        val keywordIndex = text.indexOf(keyword, searchStart, ignoreCase = true)
-                        if (keywordIndex < 0) break
-                        val startIndex = keywordIndex + keyword.length
-                        val remaining = text.substring(startIndex)
-                        val endIndex = remaining.indexOfAny(charArrayOf('\n', '\r')).takeIf { it >= 0 } ?: remaining.length
-                        val extracted = remaining.substring(0, endIndex).trim()
-                        searchStart = startIndex + endIndex
-
+                    // 优化：使用正则查找所有匹配，并提取关键词后的内容直到换行或下一个关键词
+                    val pattern = Regex("${Regex.escape(keyword)}\\s*([^\\n\\r]*)")
+                    pattern.findAll(text).forEach { match ->
+                        val extracted = match.groupValues[1].trim()
                         if (extracted.isNotEmpty()) {
                             when {
                                 targetField == "address" -> {
@@ -171,23 +134,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             } catch (e: Exception) { /* ignore */ }
         }
-
         if (addressCandidates.isEmpty()) return emptyList()
         val primaryAddress = addressCandidates.first()
         val primaryName = nameCandidates.firstOrNull() ?: primaryAddress
         val finalCategory = if (targetCategory == "互联网") autoClassify(primaryAddress) else targetCategory
-
         val extraJson = JSONObject()
         addressCandidates.drop(1).forEachIndexed { index, ip -> extraJson.put("IP${index + 2}", ip) }
         remarkMap.forEach { (key, values) -> extraJson.put(key, values.distinct().joinToString(", ")) }
-
         return listOf(IpEntry(name = primaryName.ifBlank { "未命名" }, address = primaryAddress, extraRemarks = extraJson.toString(), category = finalCategory))
     }
-
     fun batchSaveEntries(entries: List<IpEntry>) {
         viewModelScope.launch { entries.forEach { db.ipDao().insert(it) } }
     }
-
     suspend fun findImsEntry(keyword: String): IpEntry? {
         val all = db.ipDao().getAllEntriesOnce()
         return all.find { entry ->
@@ -195,7 +153,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 (try { JSONObject(entry.extraRemarks).optString("产品实例标识") == keyword } catch (e: Exception) { false }))
         }
     }
-
     fun updateImsEntry(entry: IpEntry, port: String, number: String, password: String) {
         viewModelScope.launch {
             val json = try { JSONObject(entry.extraRemarks) } catch (e: Exception) { JSONObject() }
@@ -206,7 +163,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             db.ipDao().update(updated)
         }
     }
-
     fun parseImsInfo(text: String): Triple<String, String, String> {
         var port = ""; var number = ""; var password = ""
         Regex("\\b([1-9][0-9]{0,2})\\b").find(text)?.groupValues?.get(1)?.let { port = it }
@@ -216,7 +172,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         number = longNumber ?: shortNumber ?: ""
         return Triple(port, number, password)
     }
-
     suspend fun findDuplicateEntry(address: String, productId: String? = null): IpEntry? {
         val all = db.ipDao().getAllEntriesOnce()
         return all.find { entry ->
@@ -224,7 +179,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             (productId != null && try { JSONObject(entry.extraRemarks).optString("产品实例标识") == productId } catch (e: Exception) { false })
         }
     }
-
     fun mergeRemarks(oldEntry: IpEntry, newEntry: IpEntry): IpEntry {
         val oldJson = try { JSONObject(oldEntry.extraRemarks) } catch (e: Exception) { JSONObject() }
         val newJson = try { JSONObject(newEntry.extraRemarks) } catch (e: Exception) { JSONObject() }

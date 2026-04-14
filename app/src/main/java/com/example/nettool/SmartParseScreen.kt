@@ -1,5 +1,4 @@
 package com.example.nettool
-
 import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -15,7 +14,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 import org.json.JSONObject
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SmartParseScreen(
@@ -24,25 +22,20 @@ fun SmartParseScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-
     var inputText by remember { mutableStateOf("") }
     var route by remember { mutableStateOf("") }
     var imsLocator by remember { mutableStateOf("") }
     var imsRawText by remember { mutableStateOf("") }
     var isProcessing by remember { mutableStateOf(false) }
-
     var previewEntries by remember { mutableStateOf<List<IpEntry>>(emptyList()) }
     var showConfirmDialog by remember { mutableStateOf(false) }
     var showQuickAddDialog by remember { mutableStateOf(false) }
-
     var editingEntry by remember { mutableStateOf<IpEntry?>(null) }
     var mainRemark by remember { mutableStateOf("") }
     var customerAddress by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf("互联网") }
-
     val categories by viewModel.categories.collectAsState(initial = emptyList())
     var categoryExpanded by remember { mutableStateOf(false) }
-
     fun startEditing(entry: IpEntry) {
         editingEntry = entry
         mainRemark = entry.name
@@ -54,7 +47,6 @@ fun SmartParseScreen(
         customerAddress = json.optString("地址", "").ifBlank { json.optString("address", "") }
         selectedCategory = entry.category
     }
-
     fun saveCurrentEntry() {
         editingEntry?.let { entry ->
             val json = JSONObject()
@@ -83,7 +75,6 @@ fun SmartParseScreen(
         showQuickAddDialog = false
         onBack()
     }
-
     fun startQuickAdd() {
         editingEntry = IpEntry(name = "", address = "", extraRemarks = "{}", category = "互联网")
         mainRemark = ""
@@ -91,7 +82,6 @@ fun SmartParseScreen(
         selectedCategory = "互联网"
         showQuickAddDialog = true
     }
-
     fun handleRecognize() {
         if (imsRawText.isBlank()) {
             Toast.makeText(context, "请输入原始文本", Toast.LENGTH_SHORT).show()
@@ -100,7 +90,6 @@ fun SmartParseScreen(
         scope.launch {
             val lines = imsRawText.lines().filter { it.isNotBlank() }
             val isBatch = lines.size > 1 || (lines.size == 1 && lines[0].trim().split(Regex("\\s+")).size >= 2)
-
             if (isBatch) {
                 var success = 0
                 var fail = 0
@@ -148,7 +137,6 @@ fun SmartParseScreen(
             imsRawText = ""
         }
     }
-
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -165,9 +153,7 @@ fun SmartParseScreen(
                 Icon(Icons.Default.ArrowBack, contentDescription = "返回")
             }
         }
-
         Spacer(modifier = Modifier.height(16.dp))
-
         OutlinedTextField(
             value = inputText,
             onValueChange = { inputText = it },
@@ -177,9 +163,7 @@ fun SmartParseScreen(
                 .height(150.dp),
             maxLines = 8
         )
-
         Spacer(modifier = Modifier.height(16.dp))
-
         OutlinedTextField(
             value = route,
             onValueChange = { route = it },
@@ -187,9 +171,7 @@ fun SmartParseScreen(
             modifier = Modifier.fillMaxWidth(),
             singleLine = true
         )
-
         Spacer(modifier = Modifier.height(16.dp))
-
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -222,12 +204,9 @@ fun SmartParseScreen(
                 Text("快速添加")
             }
         }
-
         Spacer(modifier = Modifier.height(24.dp))
-
         Text("📞 号码保存", style = MaterialTheme.typography.titleMedium)
         Spacer(modifier = Modifier.height(8.dp))
-
         OutlinedTextField(
             value = imsLocator,
             onValueChange = { imsLocator = it },
@@ -235,9 +214,7 @@ fun SmartParseScreen(
             modifier = Modifier.fillMaxWidth(),
             singleLine = true
         )
-
         Spacer(modifier = Modifier.height(8.dp))
-
         OutlinedTextField(
             value = imsRawText,
             onValueChange = { imsRawText = it },
@@ -245,19 +222,15 @@ fun SmartParseScreen(
             modifier = Modifier.fillMaxWidth(),
             maxLines = 5
         )
-
         Spacer(modifier = Modifier.height(12.dp))
-
         Button(
             onClick = { handleRecognize() },
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("🔍 识别并更新")
         }
-
         Spacer(modifier = Modifier.height(16.dp))
     }
-
     if (showConfirmDialog && editingEntry != null) {
         EditEntryDialog(
             entry = editingEntry!!,
@@ -272,7 +245,6 @@ fun SmartParseScreen(
             onDismiss = { showConfirmDialog = false }
         )
     }
-
     if (showQuickAddDialog && editingEntry != null) {
         EditEntryDialog(
             entry = editingEntry!!,
@@ -288,7 +260,6 @@ fun SmartParseScreen(
         )
     }
 }
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditEntryDialog(
@@ -305,7 +276,6 @@ fun EditEntryDialog(
 ) {
     var categoryExpanded by remember { mutableStateOf(false) }
     var currentAddress by remember { mutableStateOf(entry.address) }
-
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("编辑信息") },
