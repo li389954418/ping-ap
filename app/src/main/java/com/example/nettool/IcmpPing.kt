@@ -1,8 +1,9 @@
 package com.example.nettool
 
 import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.flowOn
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -14,7 +15,7 @@ object IcmpPing {
         count: Int = 4,
         packetSize: Int = 56,
         timeout: Int = 2000
-    ): Flow<String> = flow {
+    ): Flow<String> = channelFlow {
         val command = buildList {
             add("ping")
             if (count > 0) {
@@ -48,19 +49,19 @@ object IcmpPing {
 
             var hasOutput = false
             // 读取输出和错误流的协程
-            val outputJob = GlobalScope.launch(Dispatchers.IO) {
+            val outputJob = launch(Dispatchers.IO) {
                 var line = inputReader?.readLine()
                 while (line != null) {
                     hasOutput = true
-                    emit(line)
+                    send(line)
                     line = inputReader?.readLine()
                 }
             }
-            val errorJob = GlobalScope.launch(Dispatchers.IO) {
+            val errorJob = launch(Dispatchers.IO) {
                 var line = errorReader?.readLine()
                 while (line != null) {
                     hasOutput = true
-                    emit(line)
+                    send(line)
                     line = errorReader?.readLine()
                 }
             }
@@ -82,15 +83,15 @@ object IcmpPing {
             errorJob.join()
 
             if (!hasOutput && count > 0) {
-                emit("请求超时或目标不可达。")
+                send("请求超时或目标不可达。")
             } else if (exitCode != null && exitCode != 0 && count > 0) {
-                emit("Ping 命令退出码: $exitCode")
+                send("Ping 命令退出码: $exitCode")
             }
         } catch (e: CancellationException) {
-            emit("\n--- Ping 已手动取消 ---")
+            send("\n--- Ping 已手动取消 ---")
             throw e
         } catch (e: Exception) {
-            emit("ICMP Ping 异常: ${e.message}")
+            send("ICMP Ping 异常: ${e.message}")
         } finally {
             withContext(NonCancellable) {
                 inputReader?.close()
@@ -98,5 +99,6 @@ object IcmpPing {
                 process?.destroyForcibly()
             }
         }
+        awaitClose()
     }.flowOn(Dispatchers.IO)
 }
