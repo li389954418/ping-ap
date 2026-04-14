@@ -56,7 +56,7 @@ object IcmpPing {
 
             // 读取标准输出
             launch(Dispatchers.IO) {
-                var line = inputReader?.readLine()
+                var line: String? = inputReader?.readLine()
                 while (isActive && line != null) {
                     send(line)
                     line = inputReader?.readLine()
@@ -65,7 +65,7 @@ object IcmpPing {
 
             // 读取错误输出
             launch(Dispatchers.IO) {
-                var line = errorReader?.readLine()
+                var line: String? = errorReader?.readLine()
                 while (isActive && line != null) {
                     send(line)
                     line = errorReader?.readLine()
