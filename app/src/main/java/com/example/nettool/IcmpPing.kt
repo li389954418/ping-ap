@@ -1,7 +1,6 @@
 package com.example.nettool
 
 import kotlinx.coroutines.*
-import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.flowOn
@@ -44,31 +43,30 @@ object IcmpPing {
             inputReader = BufferedReader(InputStreamReader(process.inputStream))
             errorReader = BufferedReader(InputStreamReader(process.errorStream))
 
+            // 协程取消时销毁进程
             awaitClose {
-                runCatching {
-                    process?.destroy()
-                    process?.waitFor(300, TimeUnit.MILLISECONDS)
-                    if (process?.isAlive == true) process?.destroyForcibly()
-                }
-                runCatching { inputReader?.close() }
-                runCatching { errorReader?.close() }
+                process?.destroy()
+                process?.waitFor(300, TimeUnit.MILLISECONDS)
+                if (process?.isAlive == true) process?.destroyForcibly()
+                inputReader?.close()
+                errorReader?.close()
             }
 
             // 读取标准输出
             launch(Dispatchers.IO) {
-                var line = inputReader?.readLine()
-                while (isActive && line != null) {
-                    send(line)  // 此时 line 非空
-                    line = inputReader?.readLine()
+                inputReader.use { reader ->
+                    reader.lines().forEach { line ->
+                        send(line)
+                    }
                 }
             }
 
             // 读取错误输出
             launch(Dispatchers.IO) {
-                var line = errorReader?.readLine()
-                while (isActive && line != null) {
-                    send(line)  // 此时 line 非空
-                    line = errorReader?.readLine()
+                errorReader.use { reader ->
+                    reader.lines().forEach { line ->
+                        send(line)
+                    }
                 }
             }
 
