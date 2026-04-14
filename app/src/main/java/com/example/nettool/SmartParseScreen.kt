@@ -207,6 +207,7 @@ fun SmartParseScreen(
                 onClick = {
                     isProcessing = true
                     previewEntries = viewModel.autoParseAndPreview(inputText, selectedCategory)
+                    val enabledTemplates = viewModel.templates.value.filter { it.enabled }
                     isProcessing = false
                     if (previewEntries.isNotEmpty()) {
                         startEditing(previewEntries.first())

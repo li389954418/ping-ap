@@ -29,15 +29,12 @@ fun BackupScreen(
     var showImportDialog by remember { mutableStateOf(false) }
     var showAutoBackupConfig by remember { mutableStateOf(false) }
 
-    // 导出选项
     var exportEntries by remember { mutableStateOf(true) }
     var exportTemplates by remember { mutableStateOf(true) }
 
-    // 导入数据预览
     var importPreview by remember { mutableStateOf<Pair<Int, Int>?>(null) }
     var importJson by remember { mutableStateOf("") }
 
-    // 自动备份配置
     var autoBackupEnabled by remember { mutableStateOf(BackupManager.isAutoBackupEnabled(context)) }
     var autoBackupTrigger by remember { mutableStateOf(BackupManager.getAutoBackupTrigger(context)) }
     var autoBackupTarget by remember { mutableStateOf(BackupManager.getAutoBackupTarget(context)) }
@@ -56,7 +53,6 @@ fun BackupScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // 导出卡片
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text("📤 导出数据", style = MaterialTheme.typography.titleMedium)
@@ -69,7 +65,6 @@ fun BackupScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // 导入卡片
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text("📥 导入数据", style = MaterialTheme.typography.titleMedium)
@@ -82,7 +77,6 @@ fun BackupScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // 自动备份卡片
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Row(
@@ -104,7 +98,6 @@ fun BackupScreen(
         }
     }
 
-    // 导出对话框
     if (showExportDialog) {
         AlertDialog(
             onDismissRequest = { showExportDialog = false },
@@ -135,7 +128,6 @@ fun BackupScreen(
         )
     }
 
-    // 导入对话框
     if (showImportDialog) {
         AlertDialog(
             onDismissRequest = { showImportDialog = false },
@@ -189,7 +181,6 @@ fun BackupScreen(
         )
     }
 
-    // 自动备份配置对话框
     if (showAutoBackupConfig) {
         AlertDialog(
             onDismissRequest = { showAutoBackupConfig = false },
