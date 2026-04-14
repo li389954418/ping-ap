@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.flowOn
 import java.io.BufferedReader
 import java.io.InputStreamReader
+import java.util.concurrent.TimeUnit
 
 object IcmpPing {
 
@@ -14,15 +15,13 @@ object IcmpPing {
         host: String,
         count: Int = 4,
         packetSize: Int = 56,
-        timeout: Int = 2000 // 单次等待响应的超时（毫秒）
+        timeout: Int = 2000
     ): Flow<String> = channelFlow {
-        // 1. 参数验证
         require(count > 0 || count == -1 || count == 0) { "数据包数量必须为正整数、-1或0，当前值: $count" }
         
         val isInfinity = count == -1 || count == 0
         val safeCount = if (isInfinity) 0 else count.coerceAtLeast(1).coerceAtMost(999999)
 
-        // 2. 构建命令
         val command = buildList {
             add("ping")
             if (!isInfinity) {
@@ -31,53 +30,68 @@ object IcmpPing {
             }
             add("-s")
             add(packetSize.toString())
-            // -W 设置单次等待响应的超时时间（秒）
-            // 注意：Linux ping 的 -W 单位是秒，所以这里除以 1000 并至少为 1
             add("-W")
             add((timeout / 1000).coerceAtLeast(1).toString())
             add(host)
         }.toTypedArray()
 
         var process: Process? = null
+        var outputJob: Job? = null
+        var errorJob: Job? = null
 
         try {
-            // 3. 启动进程
             process = Runtime.getRuntime().exec(command)
-
-            // --- 立即发送“开始提示” ---
             send("正在 Ping $host [大小: ${packetSize}B, 超时: ${timeout}ms]...")
 
-            // 4. 读取标准输出流 (实时返回 Ping 结果)
-            val outputJob = launch(Dispatchers.IO) {
-                try {
-                    process.inputStream.bufferedReader().useLines { lines ->
-                        lines.forEach { line ->
-                            trySend(line)
-                        }
+            // 用于主动超时检测
+            var lastReceiveTime = System.currentTimeMillis()
+            val timeoutMonitor = launch(Dispatchers.IO) {
+                while (isActive) {
+                    delay(1000)
+                    val now = System.currentTimeMillis()
+                    if (now - lastReceiveTime > timeout + 1000) {
+                        send("请求超时。")
+                        lastReceiveTime = now // 重置，避免重复发送
                     }
-                } catch (e: Exception) {
-                    // 忽略流中断
                 }
             }
 
-            // 5. 读取错误流 (捕获权限错误等)
-            val errorJob = launch(Dispatchers.IO) {
+            // 读取标准输出（逐行读取，无缓冲延迟）
+            outputJob = launch(Dispatchers.IO) {
                 try {
-                    process.errorStream.bufferedReader().useLines { lines ->
-                        lines.forEach { line ->
-                            trySend("[Error] $line")
-                        }
+                    val reader = BufferedReader(InputStreamReader(process.inputStream))
+                    var line = reader.readLine()
+                    while (line != null) {
+                        lastReceiveTime = System.currentTimeMillis()
+                        send(line)
+                        line = reader.readLine()
                     }
                 } catch (e: Exception) {
                     // 忽略
                 }
             }
 
-            // 6. 监控进程存活状态
-            while (isActive && process?.isAlive == true) {
-                delay(500) 
+            // 读取错误输出
+            errorJob = launch(Dispatchers.IO) {
+                try {
+                    val reader = BufferedReader(InputStreamReader(process.errorStream))
+                    var line = reader.readLine()
+                    while (line != null) {
+                        lastReceiveTime = System.currentTimeMillis()
+                        send("[Error] $line")
+                        line = reader.readLine()
+                    }
+                } catch (e: Exception) {
+                    // 忽略
+                }
             }
 
+            // 等待进程结束
+            while (isActive && process?.isAlive == true) {
+                delay(500)
+            }
+
+            timeoutMonitor.cancel()
             outputJob.join()
             errorJob.join()
 
