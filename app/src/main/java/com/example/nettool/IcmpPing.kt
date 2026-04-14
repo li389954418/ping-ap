@@ -47,34 +47,33 @@ object IcmpPing {
             }
 
             var hasOutput = false
-            // 启动超时监控：最长等待 10 秒，若无任何输出则强制结束
-            val timeoutJob = launch {
-                delay(10000L)
-                if (!hasOutput && count > 0) {
-                    process?.destroyForcibly()
+            // 启动超时监控
+            val timeoutJob = withContext(Dispatchers.IO) {
+                launch {
+                    delay(10000L)
+                    if (!hasOutput && count > 0) {
+                        process?.destroyForcibly()
+                    }
                 }
             }
 
-            coroutineScope {
-                val outputJob = launch(Dispatchers.IO) {
+            withContext(Dispatchers.IO) {
+                val outputJob = launch {
                     var line: String?
                     while (isActive && inputReader?.readLine().also { line = it } != null) {
                         hasOutput = true
-                        emit(line ?: "")
+                        emit(line!!)
                     }
                 }
-                val errorJob = launch(Dispatchers.IO) {
+                val errorJob = launch {
                     var line: String?
                     while (isActive && errorReader?.readLine().also { line = it } != null) {
                         hasOutput = true
-                        emit(line ?: "")
+                        emit(line!!)
                     }
                 }
 
-                val exitCode = withContext(Dispatchers.IO) {
-                    process?.waitFor() ?: -1
-                }
-
+                val exitCode = process?.waitFor() ?: -1
                 timeoutJob.cancel()
                 outputJob.join()
                 errorJob.join()
