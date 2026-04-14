@@ -56,18 +56,18 @@ object IcmpPing {
 
             // 读取标准输出
             launch(Dispatchers.IO) {
-                var line: String? = inputReader?.readLine()
+                var line = inputReader?.readLine()
                 while (isActive && line != null) {
-                    send(line)
+                    send(line)  // 此时 line 非空
                     line = inputReader?.readLine()
                 }
             }
 
             // 读取错误输出
             launch(Dispatchers.IO) {
-                var line: String? = errorReader?.readLine()
+                var line = errorReader?.readLine()
                 while (isActive && line != null) {
-                    send(line)
+                    send(line)  // 此时 line 非空
                     line = errorReader?.readLine()
                 }
             }
