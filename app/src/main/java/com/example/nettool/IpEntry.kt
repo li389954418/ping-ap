@@ -10,5 +10,8 @@ data class IpEntry(
     val name: String,
     val address: String,
     val extraRemarks: String = "{}",
-    val category: String = "默认"
+    val category: String = "互联网",
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis(),
+    val deleted: Boolean = false
 )

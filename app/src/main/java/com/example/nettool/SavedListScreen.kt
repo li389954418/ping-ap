@@ -1,5 +1,9 @@
 package com.example.nettool
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
@@ -14,6 +18,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -30,9 +35,11 @@ fun SavedListScreen(
     val searchQuery by viewModel.searchQuery.collectAsState(initial = "")
     val categories by viewModel.categories.collectAsState(initial = emptyList())
     val selectedCategory by viewModel.selectedCategory.collectAsState()
+    val context = LocalContext.current
 
     var editingEntry by remember { mutableStateOf<IpEntry?>(null) }
     var showDetailDialog by remember { mutableStateOf<IpEntry?>(null) }
+    var showAddCategoryDialog by remember { mutableStateOf(false) }
 
     var remarkItems by remember { mutableStateOf(listOf<Pair<String, String>>()) }
     var mainRemark by remember { mutableStateOf("") }
@@ -44,14 +51,31 @@ fun SavedListScreen(
     var menuExpanded by remember { mutableStateOf(false) }
     var selectedEntryForMenu by remember { mutableStateOf<IpEntry?>(null) }
 
+    fun copyToClipboard(text: String, label: String = "复制内容") {
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText(label, text))
+        Toast.makeText(context, "已复制到剪贴板", Toast.LENGTH_SHORT).show()
+    }
+
+    fun getFullInfo(entry: IpEntry): String {
+        val json = try { JSONObject(entry.extraRemarks) } catch (e: Exception) { JSONObject() }
+        val addr = json.optString("地址", "").ifBlank { json.optString("address", "") }
+        return buildString {
+            appendLine("客户名称: ${entry.name}")
+            appendLine("IP地址: ${entry.address}")
+            if (addr.isNotBlank()) appendLine("地址: $addr")
+            json.keys().forEach { key ->
+                if (key != "地址" && key != "address" && !key.matches(Regex("IP\\d+"))) {
+                    appendLine("$key: ${json.optString(key)}")
+                }
+            }
+        }
+    }
+
     fun startEditing(entry: IpEntry) {
         editingEntry = entry
         mainRemark = entry.name
-        val json = try {
-            JSONObject(entry.extraRemarks)
-        } catch (e: Exception) {
-            JSONObject()
-        }
+        val json = try { JSONObject(entry.extraRemarks) } catch (e: Exception) { JSONObject() }
         customerAddress = json.optString("地址", "").ifBlank { json.optString("address", "") }
         imsPort = json.optString("ims_port", "")
         imsNumber = json.optString("ims_number", "")
@@ -70,9 +94,7 @@ fun SavedListScreen(
         return try {
             val json = JSONObject(extraRemarks)
             json.optString("地址", "").ifBlank { json.optString("address", "").ifBlank { "—" } }
-        } catch (e: Exception) {
-            "—"
-        }
+        } catch (e: Exception) { "—" }
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
@@ -88,6 +110,12 @@ fun SavedListScreen(
                         text = { Text(category) }
                     )
                 }
+                // + 号按钮新增分页
+                Tab(
+                    selected = false,
+                    onClick = { showAddCategoryDialog = true },
+                    text = { Icon(Icons.Default.Add, contentDescription = "新增分页") }
+                )
             }
             Spacer(modifier = Modifier.height(8.dp))
         }
@@ -95,7 +123,7 @@ fun SavedListScreen(
         OutlinedTextField(
             value = searchQuery,
             onValueChange = { viewModel.updateSearchQuery(it) },
-            label = { Text("🔍 搜索备注或IP") },
+            label = { Text("🔍 搜索") },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true
         )
@@ -127,46 +155,27 @@ fun SavedListScreen(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                 ) {
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = entry.name.ifBlank { "未命名" },
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            Text(entry.name.ifBlank { "未命名" }, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = entry.address,
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Medium
-                            )
+                            Text(entry.address, fontSize = 18.sp, fontWeight = FontWeight.Medium)
                             Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "📍 ${getCustomerAddress(entry.extraRemarks)}",
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            if (entry.category != "默认" && entry.category != "全部") {
-                                Text(
-                                    text = "分类: ${entry.category}",
-                                    fontSize = 10.sp,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
+                            Text("📍 ${getCustomerAddress(entry.extraRemarks)}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            if (selectedCategory == "全部" && entry.category != "互联网") {
+                                Text("分类: ${entry.category}", fontSize = 10.sp, color = MaterialTheme.colorScheme.primary)
                             }
                         }
-                        IconButton(
-                            onClick = { showDetailDialog = entry }
-                        ) {
-                            Icon(
-                                Icons.Default.Search,
-                                contentDescription = "查看详情",
-                                tint = MaterialTheme.colorScheme.primary
-                            )
+                        Row {
+                            IconButton(onClick = { copyToClipboard(entry.address, "IP地址") }) {
+                                Icon(Icons.Default.ContentCopy, contentDescription = "复制IP")
+                            }
+                            IconButton(onClick = { showDetailDialog = entry }) {
+                                Icon(Icons.Default.Info, contentDescription = "详情")
+                            }
                         }
                     }
 
@@ -178,7 +187,7 @@ fun SavedListScreen(
                             text = { Text("删除") },
                             onClick = {
                                 menuExpanded = false
-                                viewModel.deleteEntry(entry)
+                                viewModel.softDeleteEntry(entry)
                             },
                             leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) }
                         )
@@ -196,59 +205,78 @@ fun SavedListScreen(
         }
     }
 
+    // 新增分页对话框
+    if (showAddCategoryDialog) {
+        var newCategoryName by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showAddCategoryDialog = false },
+            title = { Text("新增分页") },
+            text = {
+                OutlinedTextField(
+                    value = newCategoryName,
+                    onValueChange = { newCategoryName = it },
+                    label = { Text("分页名称") },
+                    singleLine = true
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (newCategoryName.isNotBlank()) {
+                        viewModel.addCategory(newCategoryName)
+                    }
+                    showAddCategoryDialog = false
+                }) { Text("确定") }
+            },
+            dismissButton = { TextButton(onClick = { showAddCategoryDialog = false }) { Text("取消") } }
+        )
+    }
+
     // 详情弹窗
     showDetailDialog?.let { entry ->
-        val extraJson = try {
-            JSONObject(entry.extraRemarks)
-        } catch (e: Exception) {
-            JSONObject()
-        }
+        val extraJson = try { JSONObject(entry.extraRemarks) } catch (e: Exception) { JSONObject() }
         val items = mutableListOf<Pair<String, String>>()
+        val imsItems = mutableListOf<Pair<String, String>>()
         extraJson.keys().forEach { key ->
-            if (key != "地址" && key != "address" && !key.matches(Regex("IP\\d+"))
-                && key != "ims_port" && key != "ims_number" && key != "ims_password") {
-                items.add(key to extraJson.getString(key))
+            when {
+                key == "地址" || key == "address" || key.matches(Regex("IP\\d+")) -> {}
+                key.startsWith("ims_") -> imsItems.add(key.removePrefix("ims_") to extraJson.optString(key, ""))
+                else -> items.add(key to extraJson.optString(key, ""))
             }
         }
 
         AlertDialog(
             onDismissRequest = { showDetailDialog = null },
-            title = { /* 无标题 */ },
+            title = { Text("详细信息") },
             text = {
                 Column {
                     SelectionContainer {
                         Column {
                             Text("客户名称: ${entry.name}")
                             Text("IP/域名: ${entry.address}")
-                            if (entry.category != "默认") {
-                                Text("分类: ${entry.category}")
-                            }
+                            if (entry.category != "互联网") Text("分类: ${entry.category}")
                             Spacer(modifier = Modifier.height(8.dp))
                             val addr = extraJson.optString("地址", "").ifBlank { extraJson.optString("address", "") }
-                            if (addr.isNotBlank()) {
-                                Text("地址: $addr")
-                            }
+                            if (addr.isNotBlank()) Text("地址: $addr")
                             if (entry.category == "IMS") {
-                                val port = extraJson.optString("ims_port", "")
-                                val number = extraJson.optString("ims_number", "")
-                                val password = extraJson.optString("ims_password", "")
-                                if (port.isNotBlank()) Text("端口号: $port")
-                                if (number.isNotBlank()) Text("号码: $number")
-                                if (password.isNotBlank()) Text("注册密码: $password")
+                                imsItems.forEach { (k, v) -> Text("$k: $v") }
                             }
-                            items.forEach { (k, v) ->
-                                Text("$k: $v")
-                            }
+                            items.forEach { (k, v) -> Text("$k: $v") }
                         }
                     }
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showDetailDialog = null }) {
-                    Text("关闭")
+                Row {
+                    TextButton(onClick = { copyToClipboard(getFullInfo(entry), "全部信息") }) { Text("复制全部") }
+                    TextButton(onClick = { showDetailDialog = null }) { Text("关闭") }
                 }
             },
-            dismissButton = null
+            dismissButton = {
+                TextButton(onClick = {
+                    showDetailDialog = null
+                    startEditing(entry)
+                }) { Text("编辑") }
+            }
         )
     }
 
@@ -256,157 +284,60 @@ fun SavedListScreen(
     if (editingEntry != null) {
         AlertDialog(
             onDismissRequest = { editingEntry = null },
-            title = { /* 无标题 */ },
+            title = { Text("编辑信息") },
             text = {
                 Column {
-                    OutlinedTextField(
-                        value = mainRemark,
-                        onValueChange = { mainRemark = it },
-                        label = { Text("客户名称") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    OutlinedTextField(value = mainRemark, onValueChange = { mainRemark = it }, label = { Text("客户名称") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = editingEntry!!.address,
-                        onValueChange = { newAddr ->
-                            editingEntry = editingEntry!!.copy(address = newAddr)
-                        },
-                        label = { Text("IP 地址") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    OutlinedTextField(value = editingEntry!!.address, onValueChange = { editingEntry = editingEntry!!.copy(address = it) }, label = { Text("IP 地址") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = customerAddress,
-                        onValueChange = { customerAddress = it },
-                        label = { Text("客户地址") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    OutlinedTextField(value = customerAddress, onValueChange = { customerAddress = it }, label = { Text("客户地址") }, singleLine = true, modifier = Modifier.fillMaxWidth())
 
                     if (editingEntry!!.category == "IMS") {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedTextField(
-                            value = imsPort,
-                            onValueChange = { imsPort = it },
-                            label = { Text("端口号") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedTextField(
-                            value = imsNumber,
-                            onValueChange = { imsNumber = it },
-                            label = { Text("号码") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedTextField(
-                            value = imsPassword,
-                            onValueChange = { imsPassword = it },
-                            label = { Text("注册密码") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text("号码信息", style = MaterialTheme.typography.titleSmall)
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(value = imsPort, onValueChange = { imsPort = it }, label = { Text("端口", fontSize = 10.sp) }, modifier = Modifier.weight(1f), singleLine = true)
+                            OutlinedTextField(value = imsNumber, onValueChange = { imsNumber = it }, label = { Text("号码", fontSize = 10.sp) }, modifier = Modifier.weight(2f), singleLine = true)
+                            OutlinedTextField(value = imsPassword, onValueChange = { imsPassword = it }, label = { Text("密码", fontSize = 10.sp) }, modifier = Modifier.weight(3f), singleLine = true)
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
                     Text("额外备注", style = MaterialTheme.typography.titleSmall)
-                    Spacer(modifier = Modifier.height(8.dp))
                     LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
                         itemsIndexed(remarkItems) { index, (key, value) ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
+                            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Column(modifier = Modifier.weight(1f)) {
-                                    OutlinedTextField(
-                                        value = key,
-                                        onValueChange = { newKey ->
-                                            remarkItems = remarkItems.toMutableList().apply {
-                                                set(index, newKey to value)
-                                            }
-                                        },
-                                        label = { Text("备注名称") },
-                                        singleLine = true,
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
+                                    OutlinedTextField(value = key, onValueChange = { newKey -> remarkItems = remarkItems.toMutableList().apply { set(index, newKey to value) } }, label = { Text("备注名称") }, singleLine = true)
                                     Spacer(modifier = Modifier.height(4.dp))
-                                    OutlinedTextField(
-                                        value = value,
-                                        onValueChange = { newValue ->
-                                            remarkItems = remarkItems.toMutableList().apply {
-                                                set(index, key to newValue)
-                                            }
-                                        },
-                                        label = { Text("内容") },
-                                        singleLine = true,
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
+                                    OutlinedTextField(value = value, onValueChange = { newValue -> remarkItems = remarkItems.toMutableList().apply { set(index, key to newValue) } }, label = { Text("内容") }, singleLine = true)
                                 }
-                                IconButton(onClick = {
-                                    remarkItems = remarkItems.toMutableList().apply { removeAt(index) }
-                                }) {
-                                    Icon(Icons.Default.Delete, contentDescription = "删除")
-                                }
+                                IconButton(onClick = { remarkItems = remarkItems.toMutableList().apply { removeAt(index) } }) { Icon(Icons.Default.Delete, contentDescription = "删除") }
                             }
                         }
                     }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    TextButton(
-                        onClick = {
-                            remarkItems = remarkItems + ("" to "")
-                        }
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = null)
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("新增备注")
-                    }
+                    TextButton(onClick = { remarkItems = remarkItems + ("" to "") }) { Icon(Icons.Default.Add, contentDescription = null); Text("新增备注") }
                 }
             },
             confirmButton = {
                 TextButton(onClick = {
                     editingEntry?.let { entry ->
                         val json = JSONObject()
-                        try {
-                            val oldJson = JSONObject(entry.extraRemarks)
-                            oldJson.keys().forEach { key ->
-                                if (key.matches(Regex("IP\\d+"))) {
-                                    json.put(key, oldJson.get(key))
-                                }
-                            }
-                        } catch (_: Exception) {}
-                        if (customerAddress.isNotBlank()) {
-                            json.put("地址", customerAddress)
-                        }
+                        try { JSONObject(entry.extraRemarks).keys().forEach { key -> if (key.matches(Regex("IP\\d+"))) json.put(key, JSONObject(entry.extraRemarks).get(key)) } } catch (_: Exception) {}
+                        if (customerAddress.isNotBlank()) json.put("地址", customerAddress)
                         if (entry.category == "IMS") {
                             if (imsPort.isNotBlank()) json.put("ims_port", imsPort)
                             if (imsNumber.isNotBlank()) json.put("ims_number", imsNumber)
                             if (imsPassword.isNotBlank()) json.put("ims_password", imsPassword)
                         }
-                        remarkItems.forEach { (k, v) ->
-                            if (k.isNotBlank()) {
-                                json.put(k, v)
-                            }
-                        }
-                        val updatedEntry = entry.copy(
-                            name = mainRemark,
-                            extraRemarks = json.toString()
-                        )
-                        viewModel.updateEntry(updatedEntry)
+                        remarkItems.forEach { (k, v) -> if (k.isNotBlank()) json.put(k, v) }
+                        viewModel.updateEntry(entry.copy(name = mainRemark, extraRemarks = json.toString()))
                     }
                     editingEntry = null
-                }) {
-                    Text("保存")
-                }
+                }) { Text("保存") }
             },
-            dismissButton = {
-                TextButton(onClick = { editingEntry = null }) {
-                    Text("取消")
-                }
-            }
+            dismissButton = { TextButton(onClick = { editingEntry = null }) { Text("取消") } }
         )
     }
 }

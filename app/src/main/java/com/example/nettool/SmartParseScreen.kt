@@ -42,8 +42,11 @@ fun SmartParseScreen(
     var customerAddress by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf("互联网") }
 
-    // 额外备注项（智能解析时从 extraRemarks 提取）
     var remarkItems by remember { mutableStateOf(listOf<Pair<String, String>>()) }
+
+    // 重复检测弹窗
+    var duplicateData by remember { mutableStateOf<Triple<IpEntry, IpEntry, TemplateEntry>?>(null) }
+    var showDuplicateDialog by remember { mutableStateOf(false) }
 
     val categories by viewModel.categories.collectAsState(initial = emptyList())
     var categoryExpanded by remember { mutableStateOf(false) }
@@ -51,15 +54,10 @@ fun SmartParseScreen(
     fun startEditing(entry: IpEntry) {
         editingEntry = entry
         mainRemark = entry.name
-        val json = try {
-            JSONObject(entry.extraRemarks)
-        } catch (e: Exception) {
-            JSONObject()
-        }
+        val json = try { JSONObject(entry.extraRemarks) } catch (e: Exception) { JSONObject() }
         customerAddress = json.optString("地址", "").ifBlank { json.optString("address", "") }
         selectedCategory = entry.category
 
-        // 提取所有额外备注字段（排除系统保留字段）
         val items = mutableListOf<Pair<String, String>>()
         json.keys().forEach { key ->
             when {
@@ -72,39 +70,51 @@ fun SmartParseScreen(
         remarkItems = items
     }
 
-    fun saveCurrentEntry() {
+    fun saveCurrentEntry(closeAfter: Boolean = true) {
         editingEntry?.let { entry ->
             val json = JSONObject()
             try {
                 val oldJson = JSONObject(entry.extraRemarks)
                 oldJson.keys().forEach { key ->
-                    if (key.matches(Regex("IP\\d+"))) {
-                        json.put(key, oldJson.get(key))
-                    }
+                    if (key.matches(Regex("IP\\d+"))) json.put(key, oldJson.get(key))
                 }
             } catch (_: Exception) {}
-            if (customerAddress.isNotBlank()) {
-                json.put("地址", customerAddress)
-            }
-            if (route.isNotBlank()) {
-                json.put("route", route)
-            }
-            // 保存所有额外备注
-            remarkItems.forEach { (key, value) ->
-                if (key.isNotBlank()) {
-                    json.put(key, value)
-                }
-            }
+            if (customerAddress.isNotBlank()) json.put("地址", customerAddress)
+            if (route.isNotBlank()) json.put("route", route)
+            remarkItems.forEach { (key, value) -> if (key.isNotBlank()) json.put(key, value) }
+
             val updatedEntry = entry.copy(
                 name = mainRemark,
                 extraRemarks = json.toString(),
                 category = selectedCategory
             )
-            viewModel.batchSaveEntries(listOf(updatedEntry))
+
+            // 获取当前启用的模板，进行去重检测
+            scope.launch {
+                val enabledTemplates = viewModel.templates.value.filter { it.enabled }
+                val template = enabledTemplates.firstOrNull()
+                if (template != null) {
+                    val duplicate = viewModel.findDuplicateEntryByTemplate(updatedEntry, template)
+                    if (duplicate != null) {
+                        duplicateData = Triple(duplicate, updatedEntry, template)
+                        showDuplicateDialog = true
+                        return@launch
+                    }
+                }
+                // 无重复，直接保存
+                viewModel.batchSaveEntries(listOf(updatedEntry))
+                if (closeAfter) {
+                    showConfirmDialog = false
+                    showQuickAddDialog = false
+                    onBack()
+                } else {
+                    previewEntries = emptyList()
+                    editingEntry = null
+                    showConfirmDialog = false
+                    showQuickAddDialog = false
+                }
+            }
         }
-        showConfirmDialog = false
-        showQuickAddDialog = false
-        onBack()
     }
 
     fun startQuickAdd() {
@@ -126,26 +136,15 @@ fun SmartParseScreen(
             val isBatch = lines.size > 1 || (lines.size == 1 && lines[0].trim().split(Regex("\\s+")).size >= 2)
 
             if (isBatch) {
-                var success = 0
-                var fail = 0
+                var success = 0; var fail = 0
                 for (line in lines) {
                     val parts = line.trim().split(Regex("\\s+"), limit = 2)
-                    if (parts.size < 2) {
-                        fail++
-                        continue
-                    }
-                    val locator = parts[0]
-                    val raw = parts[1]
+                    if (parts.size < 2) { fail++; continue }
+                    val locator = parts[0]; val raw = parts[1]
                     val target = viewModel.findImsEntry(locator)
-                    if (target == null) {
-                        fail++
-                        continue
-                    }
+                    if (target == null) { fail++; continue }
                     val (port, number, password) = viewModel.parseImsInfo(raw)
-                    if (port.isBlank() && number.isBlank() && password.isBlank()) {
-                        fail++
-                        continue
-                    }
+                    if (port.isBlank() && number.isBlank() && password.isBlank()) { fail++; continue }
                     viewModel.updateImsEntry(target, port, number, password)
                     success++
                 }
@@ -174,10 +173,7 @@ fun SmartParseScreen(
     }
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp)
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -185,39 +181,28 @@ fun SmartParseScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text("智能解析", style = MaterialTheme.typography.headlineSmall)
-            IconButton(onClick = onBack) {
-                Icon(Icons.Default.ArrowBack, contentDescription = "返回")
-            }
+            IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "返回") }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
         OutlinedTextField(
-            value = inputText,
-            onValueChange = { inputText = it },
+            value = inputText, onValueChange = { inputText = it },
             label = { Text("粘贴文档内容") },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(150.dp),
-            maxLines = 8
+            modifier = Modifier.fillMaxWidth().height(150.dp), maxLines = 8
         )
 
         Spacer(modifier = Modifier.height(16.dp))
 
         OutlinedTextField(
-            value = route,
-            onValueChange = { route = it },
+            value = route, onValueChange = { route = it },
             label = { Text("路由（非必填）") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true
+            modifier = Modifier.fillMaxWidth(), singleLine = true
         )
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(
                 onClick = {
                     isProcessing = true
@@ -230,8 +215,7 @@ fun SmartParseScreen(
                         Toast.makeText(context, "未提取到有效信息", Toast.LENGTH_SHORT).show()
                     }
                 },
-                modifier = Modifier.weight(1f),
-                enabled = inputText.isNotBlank() && !isProcessing
+                modifier = Modifier.weight(1f), enabled = inputText.isNotBlank() && !isProcessing
             ) {
                 if (isProcessing) {
                     CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
@@ -239,12 +223,7 @@ fun SmartParseScreen(
                     Text("智能解析")
                 }
             }
-            Button(
-                onClick = { startQuickAdd() },
-                modifier = Modifier.weight(1f)
-            ) {
-                Text("快速添加")
-            }
+            Button(onClick = { startQuickAdd() }, modifier = Modifier.weight(1f)) { Text("快速添加") }
         }
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -253,68 +232,88 @@ fun SmartParseScreen(
         Spacer(modifier = Modifier.height(8.dp))
 
         OutlinedTextField(
-            value = imsLocator,
-            onValueChange = { imsLocator = it },
+            value = imsLocator, onValueChange = { imsLocator = it },
             label = { Text("输入 IP 或产品实例标识定位 IMS 记录（单条时必填）") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true
+            modifier = Modifier.fillMaxWidth(), singleLine = true
         )
 
         Spacer(modifier = Modifier.height(8.dp))
 
         OutlinedTextField(
-            value = imsRawText,
-            onValueChange = { imsRawText = it },
+            value = imsRawText, onValueChange = { imsRawText = it },
             label = { Text("粘贴文本（单条或批量，批量时每行格式: 定位标识 原始文本）") },
-            modifier = Modifier.fillMaxWidth(),
-            maxLines = 5
+            modifier = Modifier.fillMaxWidth(), maxLines = 5
         )
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        Button(
-            onClick = { handleRecognize() },
-            modifier = Modifier.fillMaxWidth()
-        ) {
+        Button(onClick = { handleRecognize() }, modifier = Modifier.fillMaxWidth()) {
             Text("🔍 识别并更新")
         }
 
         Spacer(modifier = Modifier.height(16.dp))
     }
 
-    // 智能解析确认对话框（包含额外备注编辑区域）
+    // 智能解析确认对话框
     if (showConfirmDialog && editingEntry != null) {
         EditEntryDialog(
-            entry = editingEntry!!,
-            mainRemark = mainRemark,
-            onMainRemarkChange = { mainRemark = it },
-            customerAddress = customerAddress,
-            onCustomerAddressChange = { customerAddress = it },
-            selectedCategory = selectedCategory,
-            onCategoryChange = { selectedCategory = it },
-            categories = categories,
-            remarkItems = remarkItems,
+            entry = editingEntry!!, mainRemark = mainRemark, onMainRemarkChange = { mainRemark = it },
+            customerAddress = customerAddress, onCustomerAddressChange = { customerAddress = it },
+            selectedCategory = selectedCategory, onCategoryChange = { selectedCategory = it },
+            categories = categories, remarkItems = remarkItems,
             onRemarkItemsChange = { remarkItems = it },
-            onSave = { saveCurrentEntry() },
-            onDismiss = { showConfirmDialog = false }
+            onSave = { saveCurrentEntry() }, onDismiss = { showConfirmDialog = false }
         )
     }
 
-    // 快速添加对话框（包含额外备注编辑区域）
+    // 快速添加对话框
     if (showQuickAddDialog && editingEntry != null) {
         EditEntryDialog(
-            entry = editingEntry!!,
-            mainRemark = mainRemark,
-            onMainRemarkChange = { mainRemark = it },
-            customerAddress = customerAddress,
-            onCustomerAddressChange = { customerAddress = it },
-            selectedCategory = selectedCategory,
-            onCategoryChange = { selectedCategory = it },
-            categories = categories,
-            remarkItems = remarkItems,
+            entry = editingEntry!!, mainRemark = mainRemark, onMainRemarkChange = { mainRemark = it },
+            customerAddress = customerAddress, onCustomerAddressChange = { customerAddress = it },
+            selectedCategory = selectedCategory, onCategoryChange = { selectedCategory = it },
+            categories = categories, remarkItems = remarkItems,
             onRemarkItemsChange = { remarkItems = it },
-            onSave = { saveCurrentEntry() },
-            onDismiss = { showQuickAddDialog = false }
+            onSave = { saveCurrentEntry() }, onDismiss = { showQuickAddDialog = false }
+        )
+    }
+
+    // 重复处理对话框
+    if (showDuplicateDialog && duplicateData != null) {
+        val (oldEntry, newEntry, template) = duplicateData!!
+        AlertDialog(
+            onDismissRequest = { showDuplicateDialog = false },
+            title = { Text("发现重复记录") },
+            text = {
+                Column {
+                    Text("根据模板 [${template.name}] 的去重规则，检测到重复。")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("现有记录：${oldEntry.name} (${oldEntry.address})")
+                    Text("新记录：${newEntry.name.ifBlank { "未命名" }} (${newEntry.address})")
+                }
+            },
+            confirmButton = {
+                Row {
+                    TextButton(onClick = {
+                        val merged = viewModel.mergeEntriesByTemplate(oldEntry, newEntry, template)
+                        viewModel.updateEntry(merged)
+                        showDuplicateDialog = false
+                        showConfirmDialog = false
+                        showQuickAddDialog = false
+                        onBack()
+                        Toast.makeText(context, "已按策略合并", Toast.LENGTH_SHORT).show()
+                    }) { Text("按策略合并") }
+                    TextButton(onClick = {
+                        viewModel.updateEntry(newEntry.copy(id = oldEntry.id))
+                        showDuplicateDialog = false
+                        showConfirmDialog = false
+                        showQuickAddDialog = false
+                        onBack()
+                        Toast.makeText(context, "已替换", Toast.LENGTH_SHORT).show()
+                    }) { Text("替换") }
+                }
+            },
+            dismissButton = { TextButton(onClick = { showDuplicateDialog = false }) { Text("取消") } }
         )
     }
 }
@@ -343,126 +342,47 @@ fun EditEntryDialog(
         title = { Text("编辑信息") },
         text = {
             Column {
-                OutlinedTextField(
-                    value = mainRemark,
-                    onValueChange = onMainRemarkChange,
-                    label = { Text("客户名称") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                OutlinedTextField(value = mainRemark, onValueChange = onMainRemarkChange, label = { Text("客户名称") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = currentAddress,
-                    onValueChange = { currentAddress = it },
-                    label = { Text("IP 地址") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                OutlinedTextField(value = currentAddress, onValueChange = { currentAddress = it }, label = { Text("IP 地址") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = customerAddress,
-                    onValueChange = onCustomerAddressChange,
-                    label = { Text("客户地址") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                OutlinedTextField(value = customerAddress, onValueChange = onCustomerAddressChange, label = { Text("客户地址") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 Spacer(modifier = Modifier.height(8.dp))
-                ExposedDropdownMenuBox(
-                    expanded = categoryExpanded,
-                    onExpandedChange = { categoryExpanded = it }
-                ) {
+                ExposedDropdownMenuBox(expanded = categoryExpanded, onExpandedChange = { categoryExpanded = it }) {
                     OutlinedTextField(
-                        value = selectedCategory,
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("分类") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = categoryExpanded) },
+                        value = selectedCategory, onValueChange = {}, readOnly = true,
+                        label = { Text("分类") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = categoryExpanded) },
                         modifier = Modifier.fillMaxWidth().menuAnchor()
                     )
-                    ExposedDropdownMenu(
-                        expanded = categoryExpanded,
-                        onDismissRequest = { categoryExpanded = false }
-                    ) {
+                    ExposedDropdownMenu(expanded = categoryExpanded, onDismissRequest = { categoryExpanded = false }) {
                         categories.forEach { category ->
-                            DropdownMenuItem(
-                                text = { Text(category) },
-                                onClick = {
-                                    onCategoryChange(category)
-                                    categoryExpanded = false
-                                }
-                            )
+                            DropdownMenuItem(text = { Text(category) }, onClick = { onCategoryChange(category); categoryExpanded = false })
                         }
                     }
                 }
 
-                // 额外备注区域
                 if (remarkItems.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(16.dp))
                     Text("额外备注", style = MaterialTheme.typography.titleSmall)
                     Spacer(modifier = Modifier.height(8.dp))
                     LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
                         itemsIndexed(remarkItems) { index, (key, value) ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
+                            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Column(modifier = Modifier.weight(1f)) {
-                                    OutlinedTextField(
-                                        value = key,
-                                        onValueChange = { newKey ->
-                                            val newList = remarkItems.toMutableList()
-                                            newList[index] = newKey to value
-                                            onRemarkItemsChange(newList)
-                                        },
-                                        label = { Text("字段") },
-                                        singleLine = true,
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
+                                    OutlinedTextField(value = key, onValueChange = { newKey -> onRemarkItemsChange(remarkItems.toMutableList().apply { set(index, newKey to value) }) }, label = { Text("字段") }, singleLine = true)
                                     Spacer(modifier = Modifier.height(4.dp))
-                                    OutlinedTextField(
-                                        value = value,
-                                        onValueChange = { newValue ->
-                                            val newList = remarkItems.toMutableList()
-                                            newList[index] = key to newValue
-                                            onRemarkItemsChange(newList)
-                                        },
-                                        label = { Text("值") },
-                                        singleLine = true,
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
+                                    OutlinedTextField(value = value, onValueChange = { newValue -> onRemarkItemsChange(remarkItems.toMutableList().apply { set(index, key to newValue) }) }, label = { Text("值") }, singleLine = true)
                                 }
-                                IconButton(onClick = {
-                                    val newList = remarkItems.toMutableList()
-                                    newList.removeAt(index)
-                                    onRemarkItemsChange(newList)
-                                }) {
-                                    Icon(Icons.Default.Delete, contentDescription = "删除")
-                                }
+                                IconButton(onClick = { onRemarkItemsChange(remarkItems.toMutableList().apply { removeAt(index) }) }) { Icon(Icons.Default.Delete, contentDescription = "删除") }
                             }
                         }
                     }
                     Spacer(modifier = Modifier.height(8.dp))
-                    TextButton(
-                        onClick = {
-                            onRemarkItemsChange(remarkItems + ("" to ""))
-                        }
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = null)
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("新增备注")
-                    }
+                    TextButton(onClick = { onRemarkItemsChange(remarkItems + ("" to "")) }) { Icon(Icons.Default.Add, contentDescription = null); Text("新增备注") }
                 }
             }
         },
-        confirmButton = {
-            TextButton(onClick = onSave) {
-                Text("保存")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("取消")
-            }
-        }
+        confirmButton = { TextButton(onClick = onSave) { Text("保存") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
     )
 }

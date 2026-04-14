@@ -8,6 +8,9 @@ interface TemplateDao {
     @Query("SELECT * FROM template_table ORDER BY id DESC")
     fun getAllTemplates(): Flow<List<TemplateEntry>>
 
+    @Query("SELECT * FROM template_table")
+    suspend fun getAllTemplatesOnce(): List<TemplateEntry>
+
     @Insert
     suspend fun insert(template: TemplateEntry)
 

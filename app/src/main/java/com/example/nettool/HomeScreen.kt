@@ -30,7 +30,7 @@ fun HomeScreen(
     onNavigateToSmartParse: () -> Unit = {},
     onNavigateToSavedList: () -> Unit = {}
 ) {
-    var useICMP by remember { mutableStateOf(true) }
+    var useICMP by remember { mutableStateOf(true) }  // 默认 ICMP 模式
     var targetAddress by remember { mutableStateOf("") }
     var pingCount by remember { mutableStateOf("0") }
     var pingSize by remember { mutableStateOf("56") }
@@ -39,6 +39,9 @@ fun HomeScreen(
     var outputLines by remember { mutableStateOf(listOf<String>()) }
     var isRunning by remember { mutableStateOf(false) }
     var pingJob by remember { mutableStateOf<Job?>(null) }
+
+    // 波形图数据
+    var pingTimes by remember { mutableStateOf(listOf<Double>()) }
 
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
@@ -81,9 +84,8 @@ fun HomeScreen(
                     pingPort = pingPort,
                     scope = scope,
                     onStart = { job -> pingJob = job; isRunning = true },
-                    onLine = { line ->
-                        outputLines = outputLines + line
-                    },
+                    onLine = { line -> outputLines = outputLines + line },
+                    onTime = { time -> pingTimes = (pingTimes + time).takeLast(50) },
                     onFinish = { isRunning = false; pingJob = null },
                     onCancel = { isRunning = false; pingJob = null },
                     onSummary = { summary -> outputLines = outputLines + summary }
@@ -93,7 +95,6 @@ fun HomeScreen(
         }
     }
 
-    // 自动滚动到底部
     LaunchedEffect(outputLines.size) {
         if (outputLines.isNotEmpty()) {
             listState.animateScrollToItem(outputLines.size - 1)
@@ -101,83 +102,40 @@ fun HomeScreen(
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        // 合并的搜索/输入框
-        ExposedDropdownMenuBox(
-            expanded = showDropdown && searchResults.isNotEmpty(),
-            onExpandedChange = { showDropdown = it && searchQuery.isNotBlank() }
+        // IP 输入框 + TCP 按钮同行
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            OutlinedTextField(
-                value = targetAddress,
-                onValueChange = {
-                    targetAddress = it
-                    searchQuery = it
-                    showDropdown = it.isNotBlank()
-                },
-                label = { Text("输入 IP/域名 或 搜索已保存地址") },
-                modifier = Modifier.fillMaxWidth().menuAnchor(),
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(
-                    onDone = {
-                        if (targetAddress.isNotBlank() && !isRunning) {
-                            startPing(
-                                address = targetAddress,
-                                useICMP = useICMP,
-                                pingCount = pingCount,
-                                pingSize = pingSize,
-                                pingPort = pingPort,
-                                scope = scope,
-                                onStart = { job -> pingJob = job; isRunning = true; outputLines = emptyList() },
-                                onLine = { line -> outputLines = outputLines + line },
-                                onFinish = { isRunning = false; pingJob = null },
-                                onCancel = { isRunning = false; pingJob = null },
-                                onSummary = { summary -> outputLines = outputLines + summary }
-                            )
-                        }
-                    }
-                )
-            )
-            ExposedDropdownMenu(
+            ExposedDropdownMenuBox(
                 expanded = showDropdown && searchResults.isNotEmpty(),
-                onDismissRequest = { showDropdown = false }
+                onExpandedChange = { showDropdown = it && searchQuery.isNotBlank() },
+                modifier = Modifier.weight(6f)
             ) {
-                searchResults.forEach { entry ->
-                    DropdownMenuItem(
-                        text = {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(entry.name, fontWeight = FontWeight.Medium)
-                                    Text(entry.address, style = MaterialTheme.typography.bodySmall)
-                                }
-                                IconButton(onClick = {
-                                    viewModel.requestEditEntry(entry.id)
-                                    onNavigateToSavedList()
-                                    showDropdown = false
-                                    targetAddress = ""
-                                    searchQuery = ""
-                                }) {
-                                    Icon(Icons.Default.Edit, contentDescription = "编辑")
-                                }
-                            }
-                        },
-                        onClick = {
-                            targetAddress = entry.address
-                            searchQuery = ""
-                            showDropdown = false
-                            if (!isRunning) {
+                OutlinedTextField(
+                    value = targetAddress,
+                    onValueChange = {
+                        targetAddress = it
+                        searchQuery = it
+                        showDropdown = it.isNotBlank()
+                    },
+                    label = { Text("输入 IP/域名 或 搜索") },
+                    modifier = Modifier.fillMaxWidth().menuAnchor(),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(
+                        onDone = {
+                            if (targetAddress.isNotBlank() && !isRunning) {
                                 startPing(
-                                    address = entry.address,
+                                    address = targetAddress,
                                     useICMP = useICMP,
                                     pingCount = pingCount,
                                     pingSize = pingSize,
                                     pingPort = pingPort,
                                     scope = scope,
-                                    onStart = { job -> pingJob = job; isRunning = true; outputLines = emptyList() },
+                                    onStart = { job -> pingJob = job; isRunning = true; outputLines = emptyList(); pingTimes = emptyList() },
                                     onLine = { line -> outputLines = outputLines + line },
+                                    onTime = { time -> pingTimes = (pingTimes + time).takeLast(50) },
                                     onFinish = { isRunning = false; pingJob = null },
                                     onCancel = { isRunning = false; pingJob = null },
                                     onSummary = { summary -> outputLines = outputLines + summary }
@@ -185,27 +143,72 @@ fun HomeScreen(
                             }
                         }
                     )
+                )
+                ExposedDropdownMenu(
+                    expanded = showDropdown && searchResults.isNotEmpty(),
+                    onDismissRequest = { showDropdown = false }
+                ) {
+                    searchResults.forEach { entry ->
+                        DropdownMenuItem(
+                            text = {
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(entry.name, fontWeight = FontWeight.Medium)
+                                        Text(entry.address, style = MaterialTheme.typography.bodySmall)
+                                    }
+                                    IconButton(onClick = {
+                                        viewModel.requestEditEntry(entry.id)
+                                        onNavigateToSavedList()
+                                        showDropdown = false
+                                        targetAddress = ""
+                                        searchQuery = ""
+                                    }) { Icon(Icons.Default.Edit, contentDescription = "编辑") }
+                                }
+                            },
+                            onClick = {
+                                targetAddress = entry.address
+                                searchQuery = ""
+                                showDropdown = false
+                                if (!isRunning) {
+                                    startPing(
+                                        address = entry.address,
+                                        useICMP = useICMP,
+                                        pingCount = pingCount,
+                                        pingSize = pingSize,
+                                        pingPort = pingPort,
+                                        scope = scope,
+                                        onStart = { job -> pingJob = job; isRunning = true; outputLines = emptyList(); pingTimes = emptyList() },
+                                        onLine = { line -> outputLines = outputLines + line },
+                                        onTime = { time -> pingTimes = (pingTimes + time).takeLast(50) },
+                                        onFinish = { isRunning = false; pingJob = null },
+                                        onCancel = { isRunning = false; pingJob = null },
+                                        onSummary = { summary -> outputLines = outputLines + summary }
+                                    )
+                                }
+                            }
+                        )
+                    }
                 }
             }
-        }
 
-        Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.width(4.dp))
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.Center
-        ) {
-            FilterChip(
-                selected = useICMP,
-                onClick = { useICMP = true },
-                label = { Text("ICMP (系统)") }
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            FilterChip(
-                selected = !useICMP,
-                onClick = { useICMP = false },
-                label = { Text("TCP (端口)") }
-            )
+            // TCP 按钮，高度与输入框一致，宽度为输入框的 1/6
+            Button(
+                onClick = {
+                    useICMP = !useICMP
+                },
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .defaultMinSize(minHeight = 56.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (!useICMP) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                    contentColor = if (!useICMP) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            ) {
+                Text("TCP", maxLines = 1)
+            }
         }
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -266,8 +269,9 @@ fun HomeScreen(
                             pingSize = pingSize,
                             pingPort = pingPort,
                             scope = scope,
-                            onStart = { job -> pingJob = job; isRunning = true; outputLines = emptyList() },
+                            onStart = { job -> pingJob = job; isRunning = true; outputLines = emptyList(); pingTimes = emptyList() },
                             onLine = { line -> outputLines = outputLines + line },
+                            onTime = { time -> pingTimes = (pingTimes + time).takeLast(50) },
                             onFinish = { isRunning = false; pingJob = null },
                             onCancel = { isRunning = false; pingJob = null },
                             onSummary = { summary -> outputLines = outputLines + summary }
@@ -281,7 +285,7 @@ fun HomeScreen(
             }
 
             Button(
-                onClick = { outputLines = emptyList() },
+                onClick = { outputLines = emptyList(); pingTimes = emptyList() },
                 enabled = outputLines.isNotEmpty() && !isRunning,
                 modifier = Modifier.width(120.dp)
             ) {
@@ -291,13 +295,9 @@ fun HomeScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        Text(
-            text = if (useICMP) "📡 ICMP Ping 结果" else "🔌 TCP Ping 结果 (端口 ${pingPort.ifBlank { "80" }})",
-            style = MaterialTheme.typography.titleSmall
-        )
-        Spacer(modifier = Modifier.height(4.dp))
+        // 上栏：文本输出结果
         Card(
-            modifier = Modifier.fillMaxWidth().weight(1f),
+            modifier = Modifier.fillMaxWidth().weight(2f),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
         ) {
             SelectionContainer {
@@ -313,7 +313,20 @@ fun HomeScreen(
             }
         }
 
-        // FAB 放在底部，文字为“添加”
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // 下栏：波形图
+        Card(
+            modifier = Modifier.fillMaxWidth().weight(1f),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        ) {
+            PingChart(
+                times = pingTimes,
+                modifier = Modifier.fillMaxSize().padding(8.dp)
+            )
+        }
+
+        // FAB
         FloatingActionButton(
             onClick = onNavigateToSmartParse,
             modifier = Modifier
@@ -343,6 +356,7 @@ private fun startPing(
     scope: CoroutineScope,
     onStart: (Job) -> Unit,
     onLine: (String) -> Unit,
+    onTime: (Double) -> Unit,
     onFinish: () -> Unit,
     onCancel: (() -> Unit)? = null,
     onSummary: (String) -> Unit
@@ -380,31 +394,25 @@ private fun startPing(
                     timeRegex.find(line)?.let { match ->
                         match.groupValues[1].toDoubleOrNull()?.let { time ->
                             times.add(time)
+                            onTime(time)
                         }
                     }
-                    if (line.contains("icmp_seq=")) {
-                        transmitted.value++
-                    }
+                    if (line.contains("icmp_seq=")) transmitted.value++
                 }
             } else {
                 val count = pingCount.toIntOrNull() ?: 0
                 val port = pingPort.toIntOrNull() ?: 80
-                val flow = TcpPing.ping(
-                    host = address,
-                    count = count,
-                    port = port
-                )
+                val flow = TcpPing.ping(host = address, count = count, port = port)
                 flow.collect { line ->
                     onLine(line)
                     val timeRegex = Regex("time[=<]\\s*([0-9.]+)\\s*ms")
                     timeRegex.find(line)?.let { match ->
                         match.groupValues[1].toDoubleOrNull()?.let { time ->
                             times.add(time)
+                            onTime(time)
                         }
                     }
-                    if (line.contains("seq=")) {
-                        transmitted.value++
-                    }
+                    if (line.contains("seq=")) transmitted.value++
                 }
             }
             onSummary(generateSummary())

@@ -1,23 +1,41 @@
 package com.example.nettool
 
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.core.view.WindowCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        window.statusBarColor = android.graphics.Color.TRANSPARENT
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            window.isStatusBarContrastEnforced = false
+        }
+
         setContent {
-            MaterialTheme {
+            val themeMode by ThemeManager.getThemeFlow(this).collectAsState(initial = "auto")
+            val isDark = when (themeMode) {
+                "light" -> false
+                "dark" -> true
+                else -> isSystemInDarkTheme()
+            }
+            val colorScheme = if (isDark) dynamicDarkColorScheme(this) else dynamicLightColorScheme(this)
+
+            MaterialTheme(colorScheme = colorScheme) {
                 val navController = rememberNavController()
                 val viewModel: MainViewModel = viewModel()
 
@@ -44,7 +62,8 @@ class MainActivity : ComponentActivity() {
                                 label = { Text("设置") }
                             )
                         }
-                    }
+                    },
+                    modifier = Modifier.systemBarsPadding()
                 ) { innerPadding ->
                     NavHost(
                         navController = navController,
@@ -54,7 +73,8 @@ class MainActivity : ComponentActivity() {
                         composable(Screen.Home.route) {
                             HomeScreen(
                                 viewModel = viewModel,
-                                onNavigateToSmartParse = { navController.navigate(Screen.SmartParse.route) }
+                                onNavigateToSmartParse = { navController.navigate(Screen.SmartParse.route) },
+                                onNavigateToSavedList = { navController.navigate(Screen.SavedList.route) }
                             )
                         }
                         composable(Screen.SavedList.route) {
@@ -64,9 +84,7 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                         composable(Screen.Settings.route) {
-                            SettingsScreen(
-                                navController = navController
-                            )
+                            SettingsScreen(navController = navController)
                         }
                         composable(Screen.SmartParse.route) {
                             SmartParseScreen(
@@ -74,8 +92,26 @@ class MainActivity : ComponentActivity() {
                                 onBack = { navController.popBackStack() }
                             )
                         }
-                        composable("template_management") {
+                        composable(Screen.TemplateManagement.route) {
                             TemplateManagementScreen(
+                                viewModel = viewModel,
+                                onBack = { navController.popBackStack() }
+                            )
+                        }
+                        composable(Screen.CategoryManagement.route) {
+                            CategoryManagementScreen(
+                                viewModel = viewModel,
+                                onBack = { navController.popBackStack() }
+                            )
+                        }
+                        composable(Screen.RecycleBin.route) {
+                            RecycleBinScreen(
+                                viewModel = viewModel,
+                                onBack = { navController.popBackStack() }
+                            )
+                        }
+                        composable(Screen.Backup.route) {
+                            BackupScreen(
                                 viewModel = viewModel,
                                 onBack = { navController.popBackStack() }
                             )
