@@ -12,8 +12,8 @@ android {
         applicationId = "com.example.nettool"
         minSdk = 24
         targetSdk = 34
-        versionCode = 12
-        versionName = "1.5.1"
+        versionCode = 13
+        versionName = "1.6.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -51,6 +51,7 @@ android {
 }
 
 dependencies {
+    implementation("com.github.petrbouda:icmp4j:1.0.0")
     val composeBom = platform("androidx.compose:compose-bom:2024.02.00")
     implementation(composeBom)
     androidTestImplementation(composeBom)
