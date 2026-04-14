@@ -1,3 +1,9 @@
+repositories {
+    google()
+    mavenCentral()
+    maven { url = uri("https://jitpack.io") }
+}
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")

@@ -4,11 +4,16 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+<<<<<<< HEAD
 import icmp4j.Icmp4j
 import icmp4j.IcmpPingRequest
 import icmp4j.IcmpPingResponse
 import java.net.InetAddress
 import kotlin.math.round
+=======
+import java.io.BufferedReader
+import java.io.InputStreamReader
+>>>>>>> b2a7d519900564732ff668a4801582e1fa3450dc
 
 object IcmpPing {
     fun ping(
@@ -17,6 +22,7 @@ object IcmpPing {
         packetSize: Int = 56,
         timeout: Int = 2000
     ): Flow<String> = flow {
+<<<<<<< HEAD
         val icmp = Icmp4j()
         val request = IcmpPingRequest().apply {
             this.host = host
@@ -59,6 +65,52 @@ object IcmpPing {
             if (count == 0 || sequence < count) {
                 delay(1000)
             }
+=======
+        val command = buildList {
+            add("ping")
+            if (count > 0) {
+                add("-c")
+                add(count.toString())
+            }
+            add("-s")
+            add(packetSize.toString())
+            add("-W")
+            add((timeout / 1000).toString())
+            add(host)
+        }.toTypedArray()
+
+        try {
+            val process = Runtime.getRuntime().exec(command)
+            val reader = BufferedReader(InputStreamReader(process.inputStream))
+            val errorReader = BufferedReader(InputStreamReader(process.errorStream))
+
+            val job = currentCoroutineContext()[Job]
+            job?.invokeOnCompletion {
+                process.destroy()
+            }
+
+            var line: String?
+            while (reader.readLine().also { line = it } != null) {
+                emit(line ?: "")
+                currentCoroutineContext().ensureActive()
+            }
+            while (errorReader.readLine().also { line = it } != null) {
+                emit("ERROR: $line")
+            }
+
+            val exitCode = process.waitFor()
+            reader.close()
+            errorReader.close()
+
+            if (exitCode != 0 && count > 0) {
+                emit("Ping 命令退出码: $exitCode")
+            }
+        } catch (e: CancellationException) {
+            emit("\n--- Ping 已取消 ---")
+            throw e
+        } catch (e: Exception) {
+            emit("ICMP Ping 失败: ${e.message}")
+>>>>>>> b2a7d519900564732ff668a4801582e1fa3450dc
         }
 
         val loss = if (transmitted > 0) (transmitted - received) * 100.0 / transmitted else 0.0
