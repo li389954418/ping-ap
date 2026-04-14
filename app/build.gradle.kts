@@ -13,8 +13,8 @@ android {
         applicationId = "com.example.nettool"
         minSdk = 24
         targetSdk = 34
-        versionCode = 16
-        versionName = "1.6.2"
+        versionCode = 17
+        versionName = "1.6.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -52,6 +52,7 @@ android {
 }
 
 dependencies {
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
     implementation("com.github.potterhsu:Pinger:v1.1")
     val composeBom = platform("androidx.compose:compose-bom:2024.02.00")
     implementation(composeBom)
