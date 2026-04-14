@@ -1,12 +1,12 @@
 package com.example.nettool
 
 import kotlinx.coroutines.*
-import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
-import com.potterhsu.pinger.Pinger
-import kotlin.math.round
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.util.concurrent.TimeUnit
 
 object IcmpPing {
     fun ping(
@@ -14,79 +14,88 @@ object IcmpPing {
         count: Int = 4,
         packetSize: Int = 56,
         timeout: Int = 2000
-    ): Flow<String> = callbackFlow {
-        val pinger = Pinger()
-        var sequence = 0
-        var transmitted = 0
-        var received = 0
-        val times = mutableListOf<Double>()
-        var startTime = 0L
-
-        trySend("正在 Ping $host 具有 32 字节的数据:")
-
-        pinger.setOnPingListener(object : Pinger.OnPingListener {
-            override fun onPingSuccess() {
-                transmitted++
-                val seq = ++sequence
-                if (startTime > 0) {
-                    val rtt = System.currentTimeMillis() - startTime
-                    times.add(rtt.toDouble())
-                    received++
-                    trySend("来自 $host 的回复: 字节=32 时间=${rtt}ms (seq=$seq)")
-                }
-                startTime = 0
-
-                if (count > 0 && transmitted >= count) {
-                    finishPing()
-                } else {
-                    startTime = System.currentTimeMillis()
-                    pinger.ping(host, 1)
-                }
+    ): Flow<String> = flow {
+        val command = buildList {
+            add("ping")
+            if (count > 0) {
+                add("-c")
+                add(count.toString())
             }
+            add("-s")
+            add(packetSize.toString())
+            add("-W")
+            add((timeout / 1000).toString())
+            add(host)
+        }.toTypedArray()
 
-            override fun onPingFailure() {
-                transmitted++
-                sequence++
-                trySend("请求超时。")
-                startTime = 0
+        var process: Process? = null
+        var inputReader: BufferedReader? = null
+        var errorReader: BufferedReader? = null
 
-                if (count > 0 && transmitted >= count) {
-                    finishPing()
-                } else {
-                    startTime = System.currentTimeMillis()
-                    pinger.ping(host, 1)
+        try {
+            process = Runtime.getRuntime().exec(command)
+            inputReader = BufferedReader(InputStreamReader(process.inputStream))
+            errorReader = BufferedReader(InputStreamReader(process.errorStream))
+
+            val job = currentCoroutineContext()[Job]
+            job?.invokeOnCompletion {
+                process?.destroy()
+                process?.waitFor(500, TimeUnit.MILLISECONDS)
+                if (process?.isAlive == true) {
+                    process?.destroyForcibly()
                 }
             }
 
-            override fun onPingFinish() {
-                // 通常由成功或失败后手动完成，此处保留
-            }
-
-            private fun finishPing() {
-                val loss = if (transmitted > 0) (transmitted - received) * 100.0 / transmitted else 0.0
-                val min = times.minOrNull() ?: 0.0
-                val max = times.maxOrNull() ?: 0.0
-                val avg = times.average().takeUnless { it.isNaN() } ?: 0.0
-
-                trySend("")
-                trySend("--- $host ping 统计 ---")
-                trySend("发送包数 = $transmitted，接收包数 = $received，丢失 = ${transmitted - received} (${round(loss)}% 丢失)")
-                if (received > 0) {
-                    trySend("最短 = ${round(min).toInt()}ms，最长 = ${round(max).toInt()}ms，平均 = ${round(avg).toInt()}ms")
+            var hasOutput = false
+            // 启动超时监控：最长等待 10 秒，若无任何输出则强制结束
+            val timeoutJob = launch {
+                delay(10000L)
+                if (!hasOutput && count > 0) {
+                    process?.destroyForcibly()
                 }
-                close()
             }
-        })
 
-        startTime = System.currentTimeMillis()
-        if (count > 0) {
-            pinger.ping(host, 1)
-        } else {
-            pinger.pingUntilSucceeded(host, 0)
-        }
+            coroutineScope {
+                val outputJob = launch(Dispatchers.IO) {
+                    var line: String?
+                    while (isActive && inputReader?.readLine().also { line = it } != null) {
+                        hasOutput = true
+                        emit(line ?: "")
+                    }
+                }
+                val errorJob = launch(Dispatchers.IO) {
+                    var line: String?
+                    while (isActive && errorReader?.readLine().also { line = it } != null) {
+                        hasOutput = true
+                        emit(line ?: "")
+                    }
+                }
 
-        awaitClose {
-            pinger.setOnPingListener(null)
+                val exitCode = withContext(Dispatchers.IO) {
+                    process?.waitFor() ?: -1
+                }
+
+                timeoutJob.cancel()
+                outputJob.join()
+                errorJob.join()
+
+                if (!hasOutput && count > 0) {
+                    emit("请求超时或目标不可达。")
+                } else if (exitCode != 0 && count > 0) {
+                    emit("Ping 命令退出码: $exitCode")
+                }
+            }
+        } catch (e: CancellationException) {
+            emit("\n--- Ping 已手动取消 ---")
+            throw e
+        } catch (e: Exception) {
+            emit("ICMP Ping 异常: ${e.message}")
+        } finally {
+            withContext(NonCancellable) {
+                inputReader?.close()
+                errorReader?.close()
+                process?.destroyForcibly()
+            }
         }
     }.flowOn(Dispatchers.IO)
 }
