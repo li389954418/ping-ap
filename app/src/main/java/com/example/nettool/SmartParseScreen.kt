@@ -41,7 +41,6 @@ fun SmartParseScreen(
     var mainRemark by remember { mutableStateOf("") }
     var customerAddress by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf("互联网") }
-    var currentAddress by remember { mutableStateOf("") }
 
     var remarkItems by remember { mutableStateOf(listOf<Pair<String, String>>()) }
 
@@ -55,7 +54,6 @@ fun SmartParseScreen(
     fun startEditing(entry: IpEntry) {
         editingEntry = entry
         mainRemark = entry.name
-        currentAddress = entry.address
         val json = try { JSONObject(entry.extraRemarks) } catch (e: Exception) { JSONObject() }
         customerAddress = json.optString("地址", "").ifBlank { json.optString("address", "") }
         selectedCategory = entry.category
@@ -87,7 +85,6 @@ fun SmartParseScreen(
 
             val updatedEntry = entry.copy(
                 name = mainRemark,
-                address = currentAddress,
                 extraRemarks = json.toString(),
                 category = selectedCategory
             )
@@ -121,7 +118,6 @@ fun SmartParseScreen(
     fun startQuickAdd() {
         editingEntry = IpEntry(name = "", address = "", extraRemarks = "{}", category = "互联网")
         mainRemark = ""
-        currentAddress = ""
         customerAddress = ""
         selectedCategory = "互联网"
         remarkItems = emptyList()
@@ -375,7 +371,9 @@ fun EditEntryDialog(
             Column {
                 OutlinedTextField(value = mainRemark, onValueChange = onMainRemarkChange, label = { Text("客户名称") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(value = currentAddress, onValueChange = { currentAddress = it }, label = { Text("IP 地址") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = currentAddress, onValueChange = { newAddr ->
+                    currentAddress = newAddr
+                }, label = { Text("IP 地址") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(value = customerAddress, onValueChange = onCustomerAddressChange, label = { Text("客户地址") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 Spacer(modifier = Modifier.height(8.dp))
@@ -413,7 +411,13 @@ fun EditEntryDialog(
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onSave) { Text("保存") } },
+        confirmButton = {
+            TextButton(onClick = {
+                // 关键：在保存前，将 currentAddress 同步回 entry
+                val updatedEntry = entry.copy(address = currentAddress)
+                onSave()
+            }) { Text("保存") }
+        },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
     )
 }
