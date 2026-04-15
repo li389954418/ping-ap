@@ -239,3 +239,42 @@ fun getVersionName(context: Context): String {
         "未知"
     }
 }
+
+// 关于卡片（包含使用方法）
+Card(modifier = Modifier.fillMaxWidth()) {
+    Column(modifier = Modifier.padding(16.dp)) {
+        Text("关于", style = MaterialTheme.typography.titleMedium)
+        Spacer(modifier = Modifier.height(8.dp))
+        Text("版本号：$versionName")
+        Spacer(modifier = Modifier.height(8.dp))
+        
+        var showUsageDialog by remember { mutableStateOf(false) }
+        TextButton(onClick = { showUsageDialog = true }) {
+            Text("📖 使用方法")
+        }
+        
+        if (showUsageDialog) {
+            AlertDialog(
+                onDismissRequest = { showUsageDialog = false },
+                title = { Text("使用指南") },
+                text = {
+                    LazyColumn(modifier = Modifier.heightIn(max = 400.dp)) {
+                        item { Text("🏠 首页") }
+                        item { Text("• 输入IP/域名，点击「开始」进行Ping测试") }
+                        item { Text("• 点击「TCP」按钮切换至端口探测模式") }
+                        item { Text("• 次数填0可无限Ping") }
+                        item { Spacer(modifier = Modifier.height(8.dp)) }
+                        item { Text("📋 存储页面") }
+                        item { Text("• 单击卡片：自动Ping") }
+                        item { Text("• 双击卡片：复制IP") }
+                        item { Text("• 长按卡片：编辑条目") }
+                        item { Spacer(modifier = Modifier.height(8.dp)) }
+                        item { Text("🔍 详情弹窗") }
+                        item { Text("• 双击字段值可快速修改") }
+                    }
+                },
+                confirmButton = { TextButton(onClick = { showUsageDialog = false }) { Text("知道了") } }
+            )
+        }
+    }
+}

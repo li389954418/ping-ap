@@ -4,13 +4,12 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -196,6 +195,7 @@ fun SavedListScreen(
         )
     }
 
+    // 详情弹窗（支持双击字段值编辑）
     showDetailDialog?.let { entry ->
         val extraJson = try { JSONObject(entry.extraRemarks) } catch (e: Exception) { JSONObject() }
         val items = mutableListOf<Pair<String, String>>()
@@ -213,18 +213,155 @@ fun SavedListScreen(
             title = { Text("详细信息") },
             text = {
                 Column {
-                    SelectionContainer {
-                        Column {
-                            Text("客户名称: ${entry.name}")
-                            Text("IP/域名: ${entry.address}")
-                            if (entry.category != "互联网") Text("分类: ${entry.category}")
-                            Spacer(modifier = Modifier.height(8.dp))
-                            val addr = extraJson.optString("地址", "").ifBlank { extraJson.optString("address", "") }
-                            if (addr.isNotBlank()) Text("地址: $addr")
-                            if (entry.category == "IMS") {
-                                imsItems.forEach { (k, v) -> Text("$k: $v") }
+                    // 可编辑的客户名称
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("客户名称: ", fontWeight = FontWeight.Bold)
+                        var isEditingName by remember { mutableStateOf(false) }
+                        if (isEditingName) {
+                            var tempName by remember { mutableStateOf(entry.name) }
+                            OutlinedTextField(
+                                value = tempName,
+                                onValueChange = { tempName = it },
+                                modifier = Modifier.weight(1f),
+                                singleLine = true
+                            )
+                            Row {
+                                IconButton(onClick = {
+                                    viewModel.updateEntry(entry.copy(name = tempName))
+                                    showDetailDialog = entry.copy(name = tempName)
+                                    isEditingName = false
+                                }) { Icon(Icons.Default.Check, contentDescription = "确认") }
+                                IconButton(onClick = { isEditingName = false }) { Icon(Icons.Default.Close, contentDescription = "取消") }
                             }
-                            items.forEach { (k, v) -> Text("$k: $v") }
+                        } else {
+                            Text(entry.name, modifier = Modifier.combinedClickable(
+                                onDoubleClick = { isEditingName = true }
+                            ).weight(1f))
+                        }
+                    }
+
+                    // 可编辑的 IP 地址
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("IP/域名: ", fontWeight = FontWeight.Bold)
+                        var isEditingIP by remember { mutableStateOf(false) }
+                        if (isEditingIP) {
+                            var tempIP by remember { mutableStateOf(entry.address) }
+                            OutlinedTextField(
+                                value = tempIP,
+                                onValueChange = { tempIP = it },
+                                modifier = Modifier.weight(1f),
+                                singleLine = true
+                            )
+                            Row {
+                                IconButton(onClick = {
+                                    viewModel.updateEntry(entry.copy(address = tempIP))
+                                    showDetailDialog = entry.copy(address = tempIP)
+                                    isEditingIP = false
+                                }) { Icon(Icons.Default.Check, contentDescription = "确认") }
+                                IconButton(onClick = { isEditingIP = false }) { Icon(Icons.Default.Close, contentDescription = "取消") }
+                            }
+                        } else {
+                            Text(entry.address, modifier = Modifier.combinedClickable(
+                                onDoubleClick = { isEditingIP = true }
+                            ).weight(1f))
+                        }
+                    }
+
+                    if (entry.category != "互联网") {
+                        Text("分类: ${entry.category}")
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // 可编辑的地址
+                    val addr = extraJson.optString("地址", "").ifBlank { extraJson.optString("address", "") }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("地址: ", fontWeight = FontWeight.Bold)
+                        var isEditingAddr by remember { mutableStateOf(false) }
+                        var tempAddr by remember { mutableStateOf(addr) }
+                        if (isEditingAddr) {
+                            OutlinedTextField(
+                                value = tempAddr,
+                                onValueChange = { tempAddr = it },
+                                modifier = Modifier.weight(1f),
+                                singleLine = true
+                            )
+                            Row {
+                                IconButton(onClick = {
+                                    val newJson = JSONObject(entry.extraRemarks)
+                                    newJson.put("地址", tempAddr)
+                                    viewModel.updateEntry(entry.copy(extraRemarks = newJson.toString()))
+                                    showDetailDialog = entry.copy(extraRemarks = newJson.toString())
+                                    isEditingAddr = false
+                                }) { Icon(Icons.Default.Check, contentDescription = "确认") }
+                                IconButton(onClick = { isEditingAddr = false }) { Icon(Icons.Default.Close, contentDescription = "取消") }
+                            }
+                        } else {
+                            Text(if (addr.isBlank()) "—" else addr, modifier = Modifier.combinedClickable(
+                                onDoubleClick = { isEditingAddr = true }
+                            ).weight(1f))
+                        }
+                    }
+
+                    // IMS 字段
+                    imsItems.forEach { (k, v) ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("$k: ", fontWeight = FontWeight.Bold)
+                            var isEditing by remember { mutableStateOf(false) }
+                            var tempValue by remember { mutableStateOf(v) }
+                            if (isEditing) {
+                                OutlinedTextField(
+                                    value = tempValue,
+                                    onValueChange = { tempValue = it },
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true
+                                )
+                                Row {
+                                    IconButton(onClick = {
+                                        val newJson = JSONObject(entry.extraRemarks)
+                                        newJson.put("ims_$k", tempValue)
+                                        viewModel.updateEntry(entry.copy(extraRemarks = newJson.toString()))
+                                        showDetailDialog = entry.copy(extraRemarks = newJson.toString())
+                                        isEditing = false
+                                    }) { Icon(Icons.Default.Check, contentDescription = "确认") }
+                                    IconButton(onClick = { isEditing = false }) { Icon(Icons.Default.Close, contentDescription = "取消") }
+                                }
+                            } else {
+                                Text(tempValue, modifier = Modifier.combinedClickable(
+                                    onDoubleClick = { isEditing = true }
+                                ).weight(1f))
+                            }
+                        }
+                    }
+
+                    // 其他备注字段
+                    items.forEach { (k, v) ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("$k: ", fontWeight = FontWeight.Bold)
+                            var isEditing by remember { mutableStateOf(false) }
+                            var tempValue by remember { mutableStateOf(v) }
+                            if (isEditing) {
+                                OutlinedTextField(
+                                    value = tempValue,
+                                    onValueChange = { tempValue = it },
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true
+                                )
+                                Row {
+                                    IconButton(onClick = {
+                                        val newJson = JSONObject(entry.extraRemarks)
+                                        newJson.put(k, tempValue)
+                                        viewModel.updateEntry(entry.copy(extraRemarks = newJson.toString()))
+                                        showDetailDialog = entry.copy(extraRemarks = newJson.toString())
+                                        isEditing = false
+                                    }) { Icon(Icons.Default.Check, contentDescription = "确认") }
+                                    IconButton(onClick = { isEditing = false }) { Icon(Icons.Default.Close, contentDescription = "取消") }
+                                }
+                            } else {
+                                Text(tempValue, modifier = Modifier.combinedClickable(
+                                    onDoubleClick = { isEditing = true }
+                                ).weight(1f))
+                            }
                         }
                     }
                 }
@@ -239,7 +376,7 @@ fun SavedListScreen(
                 TextButton(onClick = {
                     showDetailDialog = null
                     startEditing(entry)
-                }) { Text("编辑") }
+                }) { Text("完整编辑") }
             }
         )
     }
