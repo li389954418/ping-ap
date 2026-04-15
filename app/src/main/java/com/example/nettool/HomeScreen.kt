@@ -30,7 +30,7 @@ fun HomeScreen(
     onNavigateToSmartParse: () -> Unit = {},
     onNavigateToSavedList: () -> Unit = {}
 ) {
-    var useICMP by remember { mutableStateOf(true) }  // 默认 ICMP 模式
+    var useICMP by remember { mutableStateOf(true) }
     var targetAddress by remember { mutableStateOf("") }
     var pingCount by remember { mutableStateOf("0") }
     var pingSize by remember { mutableStateOf("56") }
@@ -40,7 +40,6 @@ fun HomeScreen(
     var isRunning by remember { mutableStateOf(false) }
     var pingJob by remember { mutableStateOf<Job?>(null) }
 
-    // 波形图数据
     var pingTimes by remember { mutableStateOf(listOf<Double>()) }
 
     val scope = rememberCoroutineScope()
@@ -107,10 +106,11 @@ fun HomeScreen(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // 输入框占据剩余宽度
             ExposedDropdownMenuBox(
                 expanded = showDropdown && searchResults.isNotEmpty(),
                 onExpandedChange = { showDropdown = it && searchQuery.isNotBlank() },
-                modifier = Modifier.weight(6f)
+                modifier = Modifier.weight(1f)
             ) {
                 OutlinedTextField(
                     value = targetAddress,
@@ -191,21 +191,17 @@ fun HomeScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.width(4.dp))
+            Spacer(modifier = Modifier.width(8.dp))
 
-            // TCP 按钮，高度与输入框一致，宽度为输入框的 1/6
+            // TCP 按钮，固定宽度，不再拉伸
             Button(
-                onClick = {
-                    useICMP = !useICMP
-                },
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .defaultMinSize(minHeight = 56.dp),
+                onClick = { useICMP = !useICMP },
+                modifier = Modifier.width(60.dp).height(56.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = if (!useICMP) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
                     contentColor = if (!useICMP) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                ),
+                contentPadding = PaddingValues(0.dp)
             ) {
                 Text("TCP", maxLines = 1)
             }
