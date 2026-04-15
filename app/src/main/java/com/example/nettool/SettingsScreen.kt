@@ -239,5 +239,3 @@ fun getVersionName(context: Context): String {
         "未知"
     }
 }
-
-}
