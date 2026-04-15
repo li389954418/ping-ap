@@ -23,11 +23,11 @@ object TcpPing {
         val address = try {
             InetAddress.getByName(host)
         } catch (e: Exception) {
-            emit("Ping 请求找不到主机 $host。请检查该名称，然后重试。")
+            emit("无法解析主机名: $host")
             return@flow
         }
 
-        emit("正在 Ping $host:${port} 具有 32 字节的数据:")
+        emit("TCPING $host (${address.hostAddress}) port=$port, timeout=${timeout}ms")
 
         var sequence = 0
         var transmitted = 0
@@ -46,9 +46,9 @@ object TcpPing {
             if (success) {
                 received++
                 times.add(timeMs)
-                emit("来自 ${address.hostAddress}:$port 的回复: 时间=${round(timeMs).toInt()}ms")
+                emit("Connected to ${address.hostAddress}:$port seq=$sequence time=${round(timeMs).toInt()} ms")
             } else {
-                emit("请求超时。")
+                emit("Connection timeout for seq=$sequence")
             }
 
             currentCoroutineContext().ensureActive()
@@ -63,10 +63,10 @@ object TcpPing {
         val max = times.maxOrNull() ?: 0.0
         val avg = times.average().takeUnless { it.isNaN() } ?: 0.0
 
-        emit("\n--- $host:$port tcping 统计 ---")
-        emit("发送包数 = $transmitted，接收包数 = $received，丢失 = ${transmitted - received} (${round(loss)}% 丢失)")
+        emit("--- $host:$port tcping statistics ---")
+        emit("$transmitted probes transmitted, $received received, ${round(loss)}% loss")
         if (received > 0) {
-            emit("最短 = ${round(min).toInt()}ms，最长 = ${round(max).toInt()}ms，平均 = ${round(avg).toInt()}ms")
+            emit("rtt min/avg/max = ${round(min)}/${round(avg)}/${round(max)} ms")
         }
     }.flowOn(Dispatchers.IO)
 
@@ -82,15 +82,16 @@ object TcpPing {
             false
         }
     }
-}
 
+    // 供 ViewModel 调用的同步方法
     companion object {
         fun tcpConnect(address: String, port: Int, timeout: Int): Boolean {
             return try {
-                java.net.Socket().use { socket ->
+                val inetAddress = InetAddress.getByName(address)
+                Socket().use { socket ->
                     socket.tcpNoDelay = true
                     socket.soTimeout = timeout
-                    socket.connect(java.net.InetSocketAddress(address, port), timeout)
+                    socket.connect(InetSocketAddress(inetAddress, port), timeout)
                 }
                 true
             } catch (e: Exception) {
@@ -98,3 +99,4 @@ object TcpPing {
             }
         }
     }
+}
