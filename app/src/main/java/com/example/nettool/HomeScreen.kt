@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.*
 import org.json.JSONObject
+import kotlin.math.round
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -35,11 +36,13 @@ fun HomeScreen(
     var pingSize by remember { mutableStateOf("56") }
     var pingPort by remember { mutableStateOf("80") }
 
-    // 从 ViewModel 订阅后台 Ping 状态
-    val outputLines by viewModel.backgroundPingOutput.collectAsState()
-    val pingTimes by viewModel.backgroundPingTimes.collectAsState()
-    val isRunning by viewModel.isBackgroundPingRunning.collectAsState()
+    var outputLines by remember { mutableStateOf(listOf<String>()) }
+    var isRunning by remember { mutableStateOf(false) }
+    var pingJob by remember { mutableStateOf<Job?>(null) }
 
+    var pingTimes by remember { mutableStateOf(listOf<Double>()) }
+
+    val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
 
     val allEntries by viewModel.entries.collectAsState(initial = emptyList())
@@ -72,12 +75,19 @@ fun HomeScreen(
         if (autoPingAddress.isNotBlank()) {
             targetAddress = autoPingAddress
             if (!isRunning) {
-                viewModel.startBackgroundPing(
+                startPing(
                     address = autoPingAddress,
                     useICMP = useICMP,
-                    pingCount = pingCount.toIntOrNull() ?: 0,
-                    pingSize = pingSize.toIntOrNull() ?: 56,
-                    pingPort = pingPort.toIntOrNull() ?: 80
+                    pingCount = pingCount,
+                    pingSize = pingSize,
+                    pingPort = pingPort,
+                    scope = scope,
+                    onStart = { job -> pingJob = job; isRunning = true },
+                    onLine = { line -> outputLines = outputLines + line },
+                    onTime = { time -> pingTimes = (pingTimes + time).takeLast(50) },
+                    onFinish = { isRunning = false; pingJob = null },
+                    onCancel = { isRunning = false; pingJob = null },
+                    onSummary = { summary -> outputLines = outputLines + summary }
                 )
             }
             viewModel.clearAutoPing()
@@ -91,7 +101,6 @@ fun HomeScreen(
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        // IP 输入框 + TCP 按钮同行
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
@@ -115,12 +124,19 @@ fun HomeScreen(
                     keyboardActions = KeyboardActions(
                         onDone = {
                             if (targetAddress.isNotBlank() && !isRunning) {
-                                viewModel.startBackgroundPing(
+                                startPing(
                                     address = targetAddress,
                                     useICMP = useICMP,
-                                    pingCount = pingCount.toIntOrNull() ?: 0,
-                                    pingSize = pingSize.toIntOrNull() ?: 56,
-                                    pingPort = pingPort.toIntOrNull() ?: 80
+                                    pingCount = pingCount,
+                                    pingSize = pingSize,
+                                    pingPort = pingPort,
+                                    scope = scope,
+                                    onStart = { job -> pingJob = job; isRunning = true; outputLines = emptyList(); pingTimes = emptyList() },
+                                    onLine = { line -> outputLines = outputLines + line },
+                                    onTime = { time -> pingTimes = (pingTimes + time).takeLast(50) },
+                                    onFinish = { isRunning = false; pingJob = null },
+                                    onCancel = { isRunning = false; pingJob = null },
+                                    onSummary = { summary -> outputLines = outputLines + summary }
                                 )
                             }
                         }
@@ -152,12 +168,19 @@ fun HomeScreen(
                                 searchQuery = ""
                                 showDropdown = false
                                 if (!isRunning) {
-                                    viewModel.startBackgroundPing(
+                                    startPing(
                                         address = entry.address,
                                         useICMP = useICMP,
-                                        pingCount = pingCount.toIntOrNull() ?: 0,
-                                        pingSize = pingSize.toIntOrNull() ?: 56,
-                                        pingPort = pingPort.toIntOrNull() ?: 80
+                                        pingCount = pingCount,
+                                        pingSize = pingSize,
+                                        pingPort = pingPort,
+                                        scope = scope,
+                                        onStart = { job -> pingJob = job; isRunning = true; outputLines = emptyList(); pingTimes = emptyList() },
+                                        onLine = { line -> outputLines = outputLines + line },
+                                        onTime = { time -> pingTimes = (pingTimes + time).takeLast(50) },
+                                        onFinish = { isRunning = false; pingJob = null },
+                                        onCancel = { isRunning = false; pingJob = null },
+                                        onSummary = { summary -> outputLines = outputLines + summary }
                                     )
                                 }
                             }
@@ -230,14 +253,21 @@ fun HomeScreen(
             Button(
                 onClick = {
                     if (isRunning) {
-                        viewModel.stopBackgroundPing()
+                        pingJob?.cancel()
                     } else {
-                        viewModel.startBackgroundPing(
+                        startPing(
                             address = targetAddress,
                             useICMP = useICMP,
-                            pingCount = pingCount.toIntOrNull() ?: 0,
-                            pingSize = pingSize.toIntOrNull() ?: 56,
-                            pingPort = pingPort.toIntOrNull() ?: 80
+                            pingCount = pingCount,
+                            pingSize = pingSize,
+                            pingPort = pingPort,
+                            scope = scope,
+                            onStart = { job -> pingJob = job; isRunning = true; outputLines = emptyList(); pingTimes = emptyList() },
+                            onLine = { line -> outputLines = outputLines + line },
+                            onTime = { time -> pingTimes = (pingTimes + time).takeLast(50) },
+                            onFinish = { isRunning = false; pingJob = null },
+                            onCancel = { isRunning = false; pingJob = null },
+                            onSummary = { summary -> outputLines = outputLines + summary }
                         )
                     }
                 },
@@ -248,7 +278,7 @@ fun HomeScreen(
             }
 
             Button(
-                onClick = { viewModel.clearBackgroundPingOutput() },
+                onClick = { outputLines = emptyList(); pingTimes = emptyList() },
                 enabled = outputLines.isNotEmpty() && !isRunning,
                 modifier = Modifier.width(120.dp)
             ) {
@@ -305,4 +335,86 @@ fun HomeScreen(
             }
         )
     }
+}
+
+private fun startPing(
+    address: String,
+    useICMP: Boolean,
+    pingCount: String,
+    pingSize: String,
+    pingPort: String,
+    scope: CoroutineScope,
+    onStart: (Job) -> Unit,
+    onLine: (String) -> Unit,
+    onTime: (Double) -> Unit,
+    onFinish: () -> Unit,
+    onCancel: (() -> Unit)? = null,
+    onSummary: (String) -> Unit
+) {
+    val transmitted = mutableStateOf(0)
+    val times = mutableListOf<Double>()
+
+    fun generateSummary(): String {
+        val received = times.size
+        val loss = if (transmitted.value > 0) (transmitted.value - received) * 100.0 / transmitted.value else 0.0
+        val min = times.minOrNull() ?: 0.0
+        val max = times.maxOrNull() ?: 0.0
+        val avg = times.average().takeUnless { it.isNaN() } ?: 0.0
+        return buildString {
+            appendLine()
+            appendLine("--- $address ping statistics ---")
+            appendLine("${transmitted.value} packets transmitted, $received received, ${round(loss).toInt()}% packet loss")
+            if (received > 0) {
+                appendLine("rtt min/avg/max = ${round(min).toInt()}/${round(avg).toInt()}/${round(max).toInt()} ms")
+            }
+        }
+    }
+
+    val job = scope.launch {
+        try {
+            if (useICMP) {
+                val flow = IcmpPing.ping(
+                    host = address,
+                    count = pingCount.toIntOrNull() ?: 0,
+                    packetSize = pingSize.toIntOrNull() ?: 56
+                )
+                flow.collect { line ->
+                    onLine(line)
+                    val timeRegex = Regex("time[=<]\\s*([0-9.]+)\\s*ms")
+                    timeRegex.find(line)?.let { match ->
+                        match.groupValues[1].toDoubleOrNull()?.let { time ->
+                            times.add(time)
+                            onTime(time)
+                        }
+                    }
+                    if (line.contains("icmp_seq=")) transmitted.value++
+                }
+            } else {
+                val count = pingCount.toIntOrNull() ?: 0
+                val port = pingPort.toIntOrNull() ?: 80
+                val flow = TcpPing.ping(host = address, count = count, port = port)
+                flow.collect { line ->
+                    onLine(line)
+                    val timeRegex = Regex("time[=<]\\s*([0-9.]+)\\s*ms")
+                    timeRegex.find(line)?.let { match ->
+                        match.groupValues[1].toDoubleOrNull()?.let { time ->
+                            times.add(time)
+                            onTime(time)
+                        }
+                    }
+                    if (line.contains("seq=")) transmitted.value++
+                }
+            }
+            onSummary(generateSummary())
+            onFinish()
+        } catch (e: CancellationException) {
+            onSummary(generateSummary())
+            onCancel?.invoke()
+            onFinish()
+        } catch (e: Exception) {
+            onLine("\n发生错误: ${e.message}")
+            onFinish()
+        }
+    }
+    onStart(job)
 }

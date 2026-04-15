@@ -4,8 +4,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -17,7 +16,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -47,9 +45,6 @@ fun SavedListScreen(
     var imsPort by remember { mutableStateOf("") }
     var imsNumber by remember { mutableStateOf("") }
     var imsPassword by remember { mutableStateOf("") }
-
-    var menuExpanded by remember { mutableStateOf(false) }
-    var selectedEntryForMenu by remember { mutableStateOf<IpEntry?>(null) }
 
     fun copyToClipboard(text: String, label: String = "复制内容") {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -110,7 +105,6 @@ fun SavedListScreen(
                         text = { Text(category) }
                     )
                 }
-                // + 号按钮新增分页
                 Tab(
                     selected = false,
                     onClick = { showAddCategoryDialog = true },
@@ -138,20 +132,20 @@ fun SavedListScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(vertical = 4.dp)
-                        .pointerInput(entry.id) {
-                            detectTapGestures(
-                                onTap = {
-                                    if (allowPing) {
-                                        viewModel.triggerAutoPing(entry.address)
-                                        onNavigateToHome()
-                                    }
-                                },
-                                onLongPress = {
-                                    selectedEntryForMenu = entry
-                                    menuExpanded = true
+                        .combinedClickable(
+                            onClick = {
+                                if (allowPing) {
+                                    viewModel.triggerAutoPing(entry.address)
+                                    onNavigateToHome()
                                 }
-                            )
-                        },
+                            },
+                            onDoubleClick = {
+                                copyToClipboard(entry.address, "IP地址")
+                            },
+                            onLongClick = {
+                                startEditing(entry)
+                            }
+                        ),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                 ) {
                     Row(
@@ -169,43 +163,15 @@ fun SavedListScreen(
                                 Text("分类: ${entry.category}", fontSize = 10.sp, color = MaterialTheme.colorScheme.primary)
                             }
                         }
-                        Row {
-                            IconButton(onClick = { copyToClipboard(entry.address, "IP地址") }) {
-                                Icon(Icons.Default.ContentCopy, contentDescription = "复制IP")
-                            }
-                            IconButton(onClick = { showDetailDialog = entry }) {
-                                Icon(Icons.Default.Info, contentDescription = "详情")
-                            }
+                        IconButton(onClick = { showDetailDialog = entry }) {
+                            Icon(Icons.Default.Info, contentDescription = "详情")
                         }
-                    }
-
-                    DropdownMenu(
-                        expanded = menuExpanded && selectedEntryForMenu?.id == entry.id,
-                        onDismissRequest = { menuExpanded = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("删除") },
-                            onClick = {
-                                menuExpanded = false
-                                viewModel.softDeleteEntry(entry)
-                            },
-                            leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("编辑") },
-                            onClick = {
-                                menuExpanded = false
-                                startEditing(entry)
-                            },
-                            leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }
-                        )
                     }
                 }
             }
         }
     }
 
-    // 新增分页对话框
     if (showAddCategoryDialog) {
         var newCategoryName by remember { mutableStateOf("") }
         AlertDialog(
@@ -221,9 +187,7 @@ fun SavedListScreen(
             },
             confirmButton = {
                 TextButton(onClick = {
-                    if (newCategoryName.isNotBlank()) {
-                        viewModel.addCategory(newCategoryName)
-                    }
+                    if (newCategoryName.isNotBlank()) viewModel.addCategory(newCategoryName)
                     showAddCategoryDialog = false
                 }) { Text("确定") }
             },
@@ -231,7 +195,6 @@ fun SavedListScreen(
         )
     }
 
-    // 详情弹窗
     showDetailDialog?.let { entry ->
         val extraJson = try { JSONObject(entry.extraRemarks) } catch (e: Exception) { JSONObject() }
         val items = mutableListOf<Pair<String, String>>()
@@ -280,7 +243,6 @@ fun SavedListScreen(
         )
     }
 
-    // 编辑对话框
     if (editingEntry != null) {
         AlertDialog(
             onDismissRequest = { editingEntry = null },

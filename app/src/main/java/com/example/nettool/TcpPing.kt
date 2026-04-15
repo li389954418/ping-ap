@@ -82,21 +82,4 @@ object TcpPing {
             false
         }
     }
-
-    // 供 ViewModel 调用的同步方法
-    companion object {
-        fun tcpConnect(address: String, port: Int, timeout: Int): Boolean {
-            return try {
-                val inetAddress = InetAddress.getByName(address)
-                Socket().use { socket ->
-                    socket.tcpNoDelay = true
-                    socket.soTimeout = timeout
-                    socket.connect(InetSocketAddress(inetAddress, port), timeout)
-                }
-                true
-            } catch (e: Exception) {
-                false
-            }
-        }
-    }
 }

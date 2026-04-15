@@ -6,6 +6,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -52,19 +55,19 @@ class MainActivity : ComponentActivity() {
                             NavigationBarItem(
                                 selected = currentRoute == Screen.Home.route,
                                 onClick = { navController.navigate(Screen.Home.route) },
-                                icon = { Text("🏠") },
+                                icon = { Icon(Icons.Outlined.Home, contentDescription = null) },
                                 label = { Text("首页") }
                             )
                             NavigationBarItem(
                                 selected = currentRoute == Screen.SavedList.route,
                                 onClick = { navController.navigate(Screen.SavedList.route) },
-                                icon = { Text("📋") },
+                                icon = { Icon(Icons.Outlined.List, contentDescription = null) },
                                 label = { Text("存储") }
                             )
                             NavigationBarItem(
                                 selected = currentRoute == Screen.Settings.route,
                                 onClick = { navController.navigate(Screen.Settings.route) },
-                                icon = { Text("⚙️") },
+                                icon = { Icon(Icons.Outlined.Settings, contentDescription = null) },
                                 label = { Text("设置") }
                             )
                         }
