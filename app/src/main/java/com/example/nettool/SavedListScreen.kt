@@ -139,10 +139,10 @@ fun SavedListScreen(
                                     onNavigateToHome()
                                 }
                             },
-                            onDoubleClick = {
+                            onClick = {}, onDoubleClick = {
                                 copyToClipboard(entry.address, "IP地址")
                             },
-                            onLongClick = {
+                            onClick = {}, onLongClick = {
                                 startEditing(entry)
                             }
                         ),
@@ -235,7 +235,7 @@ fun SavedListScreen(
                             }
                         } else {
                             Text(entry.name, modifier = Modifier.combinedClickable(
-                                onDoubleClick = { isEditingName = true }
+                                onClick = {}, onDoubleClick = { isEditingName = true }
                             ).weight(1f))
                         }
                     }
@@ -262,7 +262,7 @@ fun SavedListScreen(
                             }
                         } else {
                             Text(entry.address, modifier = Modifier.combinedClickable(
-                                onDoubleClick = { isEditingIP = true }
+                                onClick = {}, onDoubleClick = { isEditingIP = true }
                             ).weight(1f))
                         }
                     }
@@ -298,7 +298,7 @@ fun SavedListScreen(
                             }
                         } else {
                             Text(if (addr.isBlank()) "—" else addr, modifier = Modifier.combinedClickable(
-                                onDoubleClick = { isEditingAddr = true }
+                                onClick = {}, onDoubleClick = { isEditingAddr = true }
                             ).weight(1f))
                         }
                     }
@@ -328,7 +328,7 @@ fun SavedListScreen(
                                 }
                             } else {
                                 Text(tempValue, modifier = Modifier.combinedClickable(
-                                    onDoubleClick = { isEditing = true }
+                                    onClick = {}, onDoubleClick = { isEditing = true }
                                 ).weight(1f))
                             }
                         }
@@ -359,7 +359,7 @@ fun SavedListScreen(
                                 }
                             } else {
                                 Text(tempValue, modifier = Modifier.combinedClickable(
-                                    onDoubleClick = { isEditing = true }
+                                    onClick = {}, onDoubleClick = { isEditing = true }
                                 ).weight(1f))
                             }
                         }
