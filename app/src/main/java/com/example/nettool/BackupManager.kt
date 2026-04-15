@@ -6,6 +6,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.runBlocking
+import org.json.JSONObject
 import java.io.File
 
 val Context.backupDataStore by preferencesDataStore(name = "backup_settings")
@@ -14,6 +15,9 @@ object BackupManager {
     private val AUTO_BACKUP_ENABLED = booleanPreferencesKey("auto_backup_enabled")
     private val AUTO_BACKUP_TRIGGER = stringPreferencesKey("auto_backup_trigger")
     private val AUTO_BACKUP_TARGET = stringPreferencesKey("auto_backup_target")
+    private val WEBDAV_SERVER = stringPreferencesKey("webdav_server")
+    private val WEBDAV_USERNAME = stringPreferencesKey("webdav_username")
+    private val WEBDAV_PASSWORD = stringPreferencesKey("webdav_password")
 
     fun isAutoBackupEnabled(context: Context): Boolean {
         return runBlocking {
@@ -57,6 +61,26 @@ object BackupManager {
         }
     }
 
+    fun getWebDavConfig(context: Context): WebDavConfig? {
+        return runBlocking {
+            val prefs = context.backupDataStore.data.first()
+            val server = prefs[WEBDAV_SERVER] ?: return@runBlocking null
+            val username = prefs[WEBDAV_USERNAME] ?: return@runBlocking null
+            val password = prefs[WEBDAV_PASSWORD] ?: return@runBlocking null
+            WebDavConfig(server, username, password)
+        }
+    }
+
+    fun saveWebDavConfig(context: Context, config: WebDavConfig) {
+        runBlocking {
+            context.backupDataStore.edit { prefs ->
+                prefs[WEBDAV_SERVER] = config.serverUrl
+                prefs[WEBDAV_USERNAME] = config.username
+                prefs[WEBDAV_PASSWORD] = config.password
+            }
+        }
+    }
+
     fun saveToFile(context: Context, content: String, fileName: String): Boolean {
         return try {
             val backupDir = File(context.getExternalFilesDir(null), "backups")
@@ -90,10 +114,6 @@ object BackupManager {
                 }
             }
         }
-    }
-
-    private fun getWebDavConfig(context: Context): WebDavConfig? {
-        return null // TODO: 实现配置读取
     }
 }
 

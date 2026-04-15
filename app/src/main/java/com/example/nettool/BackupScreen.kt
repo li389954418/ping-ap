@@ -1,6 +1,9 @@
 package com.example.nettool
 
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -15,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 import org.json.JSONObject
+import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -28,16 +32,43 @@ fun BackupScreen(
     var showExportDialog by remember { mutableStateOf(false) }
     var showImportDialog by remember { mutableStateOf(false) }
     var showAutoBackupConfig by remember { mutableStateOf(false) }
+    var showWebDavConfig by remember { mutableStateOf(false) }
 
     var exportEntries by remember { mutableStateOf(true) }
     var exportTemplates by remember { mutableStateOf(true) }
 
     var importPreview by remember { mutableStateOf<Pair<Int, Int>?>(null) }
-    var importJson by remember { mutableStateOf("") }
+    var importFile by remember { mutableStateOf<File?>(null) }
 
     var autoBackupEnabled by remember { mutableStateOf(BackupManager.isAutoBackupEnabled(context)) }
     var autoBackupTrigger by remember { mutableStateOf(BackupManager.getAutoBackupTrigger(context)) }
     var autoBackupTarget by remember { mutableStateOf(BackupManager.getAutoBackupTarget(context)) }
+
+    // WebDAV 配置
+    var webDavConfig by remember { mutableStateOf(BackupManager.getWebDavConfig(context)) }
+    var showWebDavEditDialog by remember { mutableStateOf(false) }
+
+    // 文件选择器
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+        onResult = { uri ->
+            uri?.let {
+                try {
+                    context.contentResolver.openInputStream(it)?.bufferedReader()?.use { reader ->
+                        val content = reader.readText()
+                        val root = JSONObject(content)
+                        val entriesCount = root.optJSONArray("entries")?.length() ?: 0
+                        val templatesCount = root.optJSONArray("templates")?.length() ?: 0
+                        importPreview = entriesCount to templatesCount
+                        // 保存文件引用
+                        importFile = File(it.path ?: "backup.json")
+                    }
+                } catch (e: Exception) {
+                    Toast.makeText(context, "无效的备份文件", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    )
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Row(
@@ -53,30 +84,82 @@ fun BackupScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // 导出卡片
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text("📤 导出数据", style = MaterialTheme.typography.titleMedium)
                 Spacer(modifier = Modifier.height(8.dp))
                 Button(onClick = { showExportDialog = true }, modifier = Modifier.fillMaxWidth()) {
-                    Text("导出到本地")
+                    Text("导出到文件")
                 }
             }
         }
 
         Spacer(modifier = Modifier.height(8.dp))
 
+        // 导入卡片
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text("📥 导入数据", style = MaterialTheme.typography.titleMedium)
                 Spacer(modifier = Modifier.height(8.dp))
-                Button(onClick = { showImportDialog = true }, modifier = Modifier.fillMaxWidth()) {
-                    Text("从本地导入")
+                Button(onClick = { filePickerLauncher.launch(arrayOf("application/json", "text/plain")) }, modifier = Modifier.fillMaxWidth()) {
+                    Text("选择文件导入")
+                }
+                if (importPreview != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("将导入 ${importPreview!!.first} 个条目，${importPreview!!.second} 个模板")
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = {
+                                scope.launch {
+                                    importFile?.let { file ->
+                                        val content = file.readText()
+                                        viewModel.importData(content, importEntries = true, importTemplates = true)
+                                        Toast.makeText(context, "导入成功", Toast.LENGTH_SHORT).show()
+                                        importPreview = null
+                                        importFile = null
+                                    }
+                                }
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) { Text("确认导入") }
+                        Button(
+                            onClick = { importPreview = null; importFile = null },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                        ) { Text("取消") }
+                    }
                 }
             }
         }
 
         Spacer(modifier = Modifier.height(8.dp))
 
+        // WebDAV 配置卡片
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("☁️ 坚果云 WebDAV", style = MaterialTheme.typography.titleMedium)
+                    IconButton(onClick = { showWebDavEditDialog = true }) {
+                        Icon(Icons.Default.Settings, contentDescription = "配置")
+                    }
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                if (webDavConfig != null) {
+                    Text("已配置", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                } else {
+                    Text("未配置", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // 自动备份卡片
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Row(
@@ -98,6 +181,7 @@ fun BackupScreen(
         }
     }
 
+    // 导出对话框
     if (showExportDialog) {
         AlertDialog(
             onDismissRequest = { showExportDialog = false },
@@ -118,8 +202,9 @@ fun BackupScreen(
                 TextButton(onClick = {
                     scope.launch {
                         val data = viewModel.exportAllData()
-                        val success = BackupManager.saveToFile(context, data, "NetTool_Backup_${System.currentTimeMillis()}.json")
-                        Toast.makeText(context, if (success) "导出成功" else "导出失败", Toast.LENGTH_SHORT).show()
+                        val fileName = "NetTool_Backup_${System.currentTimeMillis()}.json"
+                        val success = BackupManager.saveToFile(context, data, fileName)
+                        Toast.makeText(context, if (success) "导出成功: $fileName" else "导出失败", Toast.LENGTH_SHORT).show()
                     }
                     showExportDialog = false
                 }) { Text("导出") }
@@ -128,59 +213,52 @@ fun BackupScreen(
         )
     }
 
-    if (showImportDialog) {
+    // WebDAV 配置编辑对话框
+    if (showWebDavEditDialog) {
+        var serverUrl by remember { mutableStateOf(webDavConfig?.serverUrl ?: "https://dav.jianguoyun.com/dav/") }
+        var username by remember { mutableStateOf(webDavConfig?.username ?: "") }
+        var password by remember { mutableStateOf(webDavConfig?.password ?: "") }
+
         AlertDialog(
-            onDismissRequest = { showImportDialog = false },
-            title = { Text("导入数据") },
+            onDismissRequest = { showWebDavEditDialog = false },
+            title = { Text("配置坚果云 WebDAV") },
             text = {
                 Column {
                     OutlinedTextField(
-                        value = importJson, onValueChange = { importJson = it },
-                        label = { Text("粘贴备份 JSON") },
-                        modifier = Modifier.fillMaxWidth().height(150.dp), maxLines = 8
+                        value = serverUrl, onValueChange = { serverUrl = it },
+                        label = { Text("服务器地址") },
+                        modifier = Modifier.fillMaxWidth(), singleLine = true
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    Button(onClick = {
-                        try {
-                            val root = JSONObject(importJson)
-                            val entriesCount = root.optJSONArray("entries")?.length() ?: 0
-                            val templatesCount = root.optJSONArray("templates")?.length() ?: 0
-                            importPreview = entriesCount to templatesCount
-                        } catch (e: Exception) {
-                            Toast.makeText(context, "无效的 JSON 格式", Toast.LENGTH_SHORT).show()
-                        }
-                    }, modifier = Modifier.fillMaxWidth()) {
-                        Text("预览数据")
-                    }
-                    if (importPreview != null) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text("将导入 ${importPreview!!.first} 个条目，${importPreview!!.second} 个模板")
-                    }
+                    OutlinedTextField(
+                        value = username, onValueChange = { username = it },
+                        label = { Text("账号（邮箱）") },
+                        modifier = Modifier.fillMaxWidth(), singleLine = true
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = password, onValueChange = { password = it },
+                        label = { Text("应用密码") },
+                        modifier = Modifier.fillMaxWidth(), singleLine = true
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("应用密码需要在坚果云网页端「安全选项」中生成，不是登录密码。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             },
             confirmButton = {
                 TextButton(onClick = {
-                    if (importJson.isNotBlank()) {
-                        scope.launch {
-                            viewModel.importData(importJson, importEntries = true, importTemplates = true)
-                            Toast.makeText(context, "导入成功", Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                    showImportDialog = false
-                    importJson = ""
-                    importPreview = null
-                }) { Text("导入") }
+                    val config = WebDavConfig(serverUrl, username, password)
+                    BackupManager.saveWebDavConfig(context, config)
+                    webDavConfig = config
+                    showWebDavEditDialog = false
+                    Toast.makeText(context, "配置已保存", Toast.LENGTH_SHORT).show()
+                }) { Text("保存") }
             },
-            dismissButton = {
-                TextButton(onClick = {
-                    showImportDialog = false
-                    importJson = ""
-                    importPreview = null
-                }) { Text("取消") }
-            }
+            dismissButton = { TextButton(onClick = { showWebDavEditDialog = false }) { Text("取消") } }
         )
     }
 
+    // 自动备份配置对话框
     if (showAutoBackupConfig) {
         AlertDialog(
             onDismissRequest = { showAutoBackupConfig = false },
