@@ -83,3 +83,18 @@ object TcpPing {
         }
     }
 }
+
+    companion object {
+        fun tcpConnect(address: String, port: Int, timeout: Int): Boolean {
+            return try {
+                java.net.Socket().use { socket ->
+                    socket.tcpNoDelay = true
+                    socket.soTimeout = timeout
+                    socket.connect(java.net.InetSocketAddress(address, port), timeout)
+                }
+                true
+            } catch (e: Exception) {
+                false
+            }
+        }
+    }
