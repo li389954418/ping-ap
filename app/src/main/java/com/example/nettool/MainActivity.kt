@@ -1,8 +1,6 @@
 package com.example.nettool
 
-import android.os.Build
 import android.os.Bundle
-import android.view.WindowInsetsController
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -23,8 +21,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
+        // 允许内容延伸到系统栏下方
         WindowCompat.setDecorFitsSystemWindows(window, false)
-        window.statusBarColor = android.graphics.Color.TRANSPARENT
+        // 移除手动设置状态栏颜色，改由主题控制
 
         setContent {
             val themeMode by ThemeManager.getThemeFlow(this).collectAsState(initial = "auto")
@@ -32,24 +31,6 @@ class MainActivity : ComponentActivity() {
                 "light" -> false
                 "dark" -> true
                 else -> isSystemInDarkTheme()
-            }
-            
-            // 换用更直接的方式设置状态栏图标颜色
-            DisposableEffect(isDark) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    window.insetsController?.setSystemBarsAppearance(
-                        if (isDark) 0 else WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS,
-                        WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS
-                    )
-                } else {
-                    @Suppress("DEPRECATION")
-                    window.decorView.systemUiVisibility = if (isDark) {
-                        window.decorView.systemUiVisibility and android.view.View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR.inv()
-                    } else {
-                        window.decorView.systemUiVisibility or android.view.View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
-                    }
-                }
-                onDispose { }
             }
 
             val colorScheme = if (isDark) dynamicDarkColorScheme(this) else dynamicLightColorScheme(this)
