@@ -21,9 +21,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // 允许内容延伸到系统栏下方
         WindowCompat.setDecorFitsSystemWindows(window, false)
-        // 移除手动设置状态栏颜色，改由主题控制
 
         setContent {
             val themeMode by ThemeManager.getThemeFlow(this).collectAsState(initial = "auto")
