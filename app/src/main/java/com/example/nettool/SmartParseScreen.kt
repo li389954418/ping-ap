@@ -130,9 +130,12 @@ fun SmartParseScreen(
                     val target = viewModel.findImsEntry(locator)
                     if (target == null) { fail++; continue }
                     val (port, number, password) = viewModel.parseImsInfo(raw)
-                    if (port.isBlank() && number.isBlank() && password.isBlank()) { fail++; continue }
-                    viewModel.updateImsEntry(target, port, number, password)
-                    success++
+                    if (port.isNotBlank() || number.isNotBlank() || password.isNotBlank()) {
+                        viewModel.updateImsEntry(target, port, number, password)
+                        success++
+                    } else {
+                        fail++
+                    }
                 }
                 Toast.makeText(context, "批量完成: 成功 $success 条, 失败 $fail 条", Toast.LENGTH_LONG).show()
             } else {
