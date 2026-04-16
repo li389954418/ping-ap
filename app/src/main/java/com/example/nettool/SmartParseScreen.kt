@@ -128,10 +128,9 @@ fun SmartParseScreen(
                     val locator = parts[0]; val raw = parts[1]
                     val target = viewModel.findImsEntry(locator)
                     if (target == null) { fail++; continue }
-                    val (port, number, password) = viewModel.parseImsInfo(raw)
-                    if (port.isBlank() && number.isBlank() && password.isBlank()) { fail++; continue }
-                    viewModel.updateImsEntry(target, port, number, password)
-                    success++
+                    val updated = parseWithTemplate(raw, target)
+                    if (updated != null) { viewModel.updateEntry(updated); success++ }
+                    else { fail++ }
                 }
                 Toast.makeText(context, "批量完成: 成功 $success 条, 失败 $fail 条", Toast.LENGTH_LONG).show()
             } else {
@@ -144,17 +143,49 @@ fun SmartParseScreen(
                     Toast.makeText(context, "未找到匹配的 IMS 记录", Toast.LENGTH_SHORT).show()
                     return@launch
                 }
-                val (port, number, password) = viewModel.parseImsInfo(imsRawText)
-                if (port.isBlank() && number.isBlank() && password.isBlank()) {
+                val updated = parseWithTemplate(imsRawText, target)
+                if (updated != null) {
+                    viewModel.updateEntry(updated)
+                    Toast.makeText(context, "已更新 IMS 记录: ${target.name}", Toast.LENGTH_SHORT).show()
+                    imsLocator = ""
+                } else {
                     Toast.makeText(context, "未能识别到有效信息", Toast.LENGTH_SHORT).show()
-                    return@launch
                 }
-                viewModel.updateImsEntry(target, port, number, password)
-                Toast.makeText(context, "已更新 IMS 记录: ${target.name}", Toast.LENGTH_SHORT).show()
-                imsLocator = ""
             }
             imsRawText = ""
         }
+    }
+
+    fun parseWithTemplate(text: String, entry: IpEntry): IpEntry? {
+        val templates = viewModel.templates.value.filter { it.enabled && it.name.contains("号码", ignoreCase = true) }
+        if (templates.isEmpty()) return null
+        var updatedEntry = entry
+        var hasChange = false
+        templates.forEach { template ->
+            try {
+                val rulesArray = JSONArray(template.rulesJson)
+                for (i in 0 until rulesArray.length()) {
+                    val rule = rulesArray.getJSONObject(i)
+                    val keyword = rule.getString("keyword")
+                    val targetField = rule.getString("targetField")
+                    val pattern = Regex("${Regex.escape(keyword)}\\s*([^\\n\\r]*)")
+                    pattern.find(text)?.let { match ->
+                        val extracted = match.groupValues[1].trim()
+                        if (extracted.isNotEmpty()) {
+                            val json = JSONObject(updatedEntry.extraRemarks)
+                            when (targetField) {
+                                "remark_ims_port" -> json.put("ims_port", extracted)
+                                "remark_ims_number" -> json.put("ims_number", extracted)
+                                "remark_ims_password" -> json.put("ims_password", extracted)
+                            }
+                            updatedEntry = updatedEntry.copy(extraRemarks = json.toString())
+                            hasChange = true
+                        }
+                    }
+                }
+            } catch (e: Exception) {}
+        }
+        return if (hasChange) updatedEntry else null
     }
 
     Column(
