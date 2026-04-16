@@ -18,6 +18,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.datastore.preferences.preferencesDataStore
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -35,6 +38,7 @@ fun SavedListScreen(
     val categories by viewModel.categories.collectAsState(initial = emptyList())
     val selectedCategory by viewModel.selectedCategory.collectAsState()
     val context = LocalContext.current
+    val currentUserName = remember { runCatching { context.dataStore.data.first()[ThemeManager.USER_NAME] ?: "" }.getOrDefault("") }
 
     var editingEntry by remember { mutableStateOf<IpEntry?>(null) }
     var showDetailDialog by remember { mutableStateOf<IpEntry?>(null) }
@@ -189,6 +193,9 @@ fun SavedListScreen(
                             Text("📍 ${getCustomerAddress(entry.extraRemarks)}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             if (selectedCategory == "全部" && entry.category != "互联网") {
                                 Text("分类: ${entry.category}", fontSize = 10.sp, color = MaterialTheme.colorScheme.primary)
+                            if (entry.userName.isNotBlank() && entry.userName != currentUserName) {
+                                Text("备份人: ${entry.userName}", fontSize = 10.sp, color = MaterialTheme.colorScheme.tertiary)
+                            }
                             }
                         }
                         IconButton(onClick = { showDetailDialog = entry }) {

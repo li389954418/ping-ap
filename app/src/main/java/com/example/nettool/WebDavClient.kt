@@ -54,3 +54,16 @@ object WebDavClient {
         }
     }
 }
+
+    suspend fun downloadLatest(config: WebDavConfig, prefix: String): String? {
+        return try {
+            val files = listFiles(config)
+            val latestFile = files.filter { it.startsWith(prefix) && it.endsWith(".json") }
+                .maxByOrNull { it }
+            if (latestFile != null) {
+                download(config, latestFile)
+            } else null
+        } catch (e: Exception) {
+            null
+        }
+    }

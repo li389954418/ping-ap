@@ -29,3 +29,6 @@ interface IpDao {
     @Query("DELETE FROM ip_table WHERE deleted = 1")
     suspend fun permanentlyDeleteAllDeleted()
 }
+
+    @Query("DELETE FROM ip_table")
+    suspend fun deleteAll()

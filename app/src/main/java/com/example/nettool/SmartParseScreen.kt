@@ -91,7 +91,8 @@ fun SmartParseScreen(
             if (route.isNotBlank()) json.put("route", route)
             remarkItems.forEach { (key, value) -> if (key.isNotBlank()) json.put(key, value) }
 
-            val updatedEntry = entry.copy(name = mainRemark, extraRemarks = json.toString(), category = selectedCategory)
+                    val currentUserName = try { context.dataStore.data.first()[ThemeManager.USER_NAME] ?: "" } catch (e: Exception) { "" }
+            val updatedEntry = entry.copy(userName = currentUserName, name = mainRemark, extraRemarks = json.toString(), category = selectedCategory)
 
             scope.launch {
                 val enabledTemplates = templates.filter { it.enabled }

@@ -13,5 +13,6 @@ data class IpEntry(
     val category: String = "互联网",
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
-    val deleted: Boolean = false
+    val deleted: Boolean = false,
+    val userName: String = ""  // 创建/编辑时的使用人
 )

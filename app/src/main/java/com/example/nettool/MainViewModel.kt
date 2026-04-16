@@ -61,7 +61,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun updateSearchQuery(query: String) { _searchQuery.value = query }
     fun setSelectedCategory(category: String) { _selectedCategory.value = category }
 
-    fun addEntry(name: String, address: String, extraRemarks: String = "{}", category: String = "互联网") {
+    fun addEntry(name: String, address: String, extraRemarks: String = "{}", category: String = "互联网", userName: String = "") {
         viewModelScope.launch {
             val now = System.currentTimeMillis()
             db.ipDao().insert(
@@ -444,3 +444,34 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 }
+
+    suspend fun getAllEntriesSync(): List<IpEntry> {
+        return db.ipDao().getAllEntriesOnce().filter { !it.deleted }
+    }
+
+    suspend fun replaceAllEntries(entries: List<IpEntry>) {
+        db.ipDao().deleteAll()
+        entries.forEach { db.ipDao().insert(it) }
+    }
+
+    fun exportEntries(entries: List<IpEntry>): String {
+        val root = JSONObject()
+        root.put("version", 1)
+        root.put("exportTime", System.currentTimeMillis())
+        val entriesArray = JSONArray()
+        entries.forEach { entry ->
+            val obj = JSONObject()
+            obj.put("id", entry.id)
+            obj.put("name", entry.name)
+            obj.put("address", entry.address)
+            obj.put("extraRemarks", entry.extraRemarks)
+            obj.put("category", entry.category)
+            obj.put("createdAt", entry.createdAt)
+            obj.put("updatedAt", entry.updatedAt)
+            obj.put("deleted", entry.deleted)
+            obj.put("userName", entry.userName)
+            entriesArray.put(obj)
+        }
+        root.put("entries", entriesArray)
+        return root.toString()
+    }
