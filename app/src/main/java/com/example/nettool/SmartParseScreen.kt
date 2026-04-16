@@ -17,6 +17,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -91,7 +92,7 @@ fun SmartParseScreen(
             if (route.isNotBlank()) json.put("route", route)
             remarkItems.forEach { (key, value) -> if (key.isNotBlank()) json.put(key, value) }
 
-                    val currentUserName = try { context.dataStore.data.first()[ThemeManager.USER_NAME] ?: "" } catch (e: Exception) { "" }
+                    val currentUserName = try { runBlocking { context.dataStore.data.first()[ThemeManager.USER_NAME] ?: "" } } catch (e: Exception) { "" }
             val updatedEntry = entry.copy(userName = currentUserName, name = mainRemark, extraRemarks = json.toString(), category = selectedCategory)
 
             scope.launch {

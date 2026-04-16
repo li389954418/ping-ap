@@ -21,6 +21,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.runBlocking
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -38,7 +39,7 @@ fun SavedListScreen(
     val categories by viewModel.categories.collectAsState(initial = emptyList())
     val selectedCategory by viewModel.selectedCategory.collectAsState()
     val context = LocalContext.current
-    val currentUserName = remember { runCatching { context.dataStore.data.first()[ThemeManager.USER_NAME] ?: "" }.getOrDefault("") }
+    val currentUserName = remember { runCatching { runBlocking { context.dataStore.data.first()[ThemeManager.USER_NAME] ?: "" } }.getOrDefault("") }
 
     var editingEntry by remember { mutableStateOf<IpEntry?>(null) }
     var showDetailDialog by remember { mutableStateOf<IpEntry?>(null) }

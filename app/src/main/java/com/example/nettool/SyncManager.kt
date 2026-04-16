@@ -2,6 +2,8 @@ package com.example.nettool
 
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -37,14 +39,12 @@ object SyncManager {
 
         try {
             onProgress("正在准备同步...")
-            val currentUserName = runCatching { 
-                context.dataStore.data.first()[ThemeManager.USER_NAME] ?: "" 
-            }.getOrDefault("")
+            val currentUserName = runBlocking {
+                runCatching { context.dataStore.data.first()[ThemeManager.USER_NAME] ?: "" }.getOrDefault("")
+            }
 
-            // 1. 获取本地数据
             val localEntries = viewModel.getAllEntriesSync()
             
-            // 2. 从云端拉取数据
             val target = BackupManager.getAutoBackupTarget(context)
             val cloudData = when (target) {
                 "webdav" -> {
@@ -60,7 +60,6 @@ object SyncManager {
                 }
             }
 
-            // 3. 解析云端数据
             val cloudEntries = mutableListOf<IpEntry>()
             if (cloudData.isNotBlank()) {
                 onProgress("正在解析云端数据...")
@@ -86,36 +85,29 @@ object SyncManager {
                 }
             }
 
-            // 4. 三方对比合并
             onProgress("正在合并数据...")
             val mergedEntries = mutableListOf<IpEntry>()
             val localMap = localEntries.associateBy { it.id }
             val cloudMap = cloudEntries.associateBy { it.id }
 
-            // 处理本地有、云端无的条目（上传）
             localEntries.forEach { local ->
                 val cloud = cloudMap[local.id]
                 if (cloud == null) {
                     mergedEntries.add(local)
                     uploaded++
                 } else {
-                    // 两边都有，检查是否冲突
                     if (local.updatedAt > cloud.updatedAt) {
-                        // 本地更新，覆盖云端
                         mergedEntries.add(local)
                         uploaded++
                     } else if (cloud.updatedAt > local.updatedAt) {
-                        // 云端更新，覆盖本地
                         mergedEntries.add(cloud.copy(userName = cloud.userName.ifBlank { "云端" }))
                         downloaded++
                     } else {
-                        // 时间相同，无冲突
                         mergedEntries.add(local)
                     }
                 }
             }
 
-            // 处理云端有、本地无的条目（下载）
             cloudEntries.forEach { cloud ->
                 if (!localMap.containsKey(cloud.id)) {
                     mergedEntries.add(cloud.copy(userName = cloud.userName.ifBlank { "云端" }))
@@ -123,11 +115,9 @@ object SyncManager {
                 }
             }
 
-            // 5. 保存合并后的数据
             onProgress("正在保存数据...")
             viewModel.replaceAllEntries(mergedEntries)
 
-            // 6. 上传合并后的完整数据到云端
             onProgress("正在上传同步结果...")
             val exportData = viewModel.exportEntries(mergedEntries)
             val fileName = "NetTool_Sync_${System.currentTimeMillis()}.json"

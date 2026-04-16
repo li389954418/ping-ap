@@ -445,13 +445,34 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 }
 
+        val root = JSONObject()
+        root.put("version", 1)
+        root.put("exportTime", System.currentTimeMillis())
+        val entriesArray = JSONArray()
+        entries.forEach { entry ->
+            val obj = JSONObject()
+            obj.put("id", entry.id)
+            obj.put("name", entry.name)
+            obj.put("address", entry.address)
+            obj.put("extraRemarks", entry.extraRemarks)
+            obj.put("category", entry.category)
+            obj.put("createdAt", entry.createdAt)
+            obj.put("updatedAt", entry.updatedAt)
+            obj.put("deleted", entry.deleted)
+            obj.put("userName", entry.userName)
+            entriesArray.put(obj)
+        }
+        root.put("entries", entriesArray)
+        return root.toString()
+    }
+
     suspend fun getAllEntriesSync(): List<IpEntry> {
         return db.ipDao().getAllEntriesOnce().filter { !it.deleted }
     }
 
     suspend fun replaceAllEntries(entries: List<IpEntry>) {
         db.ipDao().deleteAll()
-        entries.forEach { db.ipDao().insert(it) }
+        entries.forEach { entry -> db.ipDao().insert(entry) }
     }
 
     fun exportEntries(entries: List<IpEntry>): String {

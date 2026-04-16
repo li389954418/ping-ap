@@ -67,3 +67,43 @@ object WebDavClient {
             null
         }
     }
+
+    suspend fun listFiles(config: WebDavConfig, remotePath: String = ""): List<String> = withContext(Dispatchers.IO) {
+        try {
+            val url = URL("${config.serverUrl.trimEnd('/')}/$remotePath")
+            val connection = url.openConnection() as HttpURLConnection
+            connection.requestMethod = "PROPFIND"
+            connection.setRequestProperty("Authorization", "Basic ${Base64.getEncoder().encodeToString("${config.username}:${config.password}".toByteArray())}")
+            connection.setRequestProperty("Depth", "1")
+            connection.inputStream.bufferedReader().readText().let { response ->
+                Regex("<D:href>(.*?)</D:href>").findAll(response).map { it.groupValues[1] }.filter { it != "/$remotePath" }.toList()
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    suspend fun downloadLatest(config: WebDavConfig, prefix: String): String? {
+        return try {
+            val files = listFiles(config)
+            val latestFile = files.filter { it.startsWith(prefix) && it.endsWith(".json") }
+                .maxByOrNull { it }
+            if (latestFile != null) {
+                download(config, latestFile)
+            } else null
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    suspend fun download(config: WebDavConfig, remotePath: String): String? = withContext(Dispatchers.IO) {
+        try {
+            val url = URL("${config.serverUrl.trimEnd('/')}/$remotePath")
+            val connection = url.openConnection() as HttpURLConnection
+            connection.requestMethod = "GET"
+            connection.setRequestProperty("Authorization", "Basic ${Base64.getEncoder().encodeToString("${config.username}:${config.password}".toByteArray())}")
+            connection.inputStream.bufferedReader().readText()
+        } catch (e: Exception) {
+            null
+        }
+    }
