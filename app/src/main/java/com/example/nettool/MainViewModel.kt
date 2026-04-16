@@ -445,6 +445,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 }
 
+    suspend fun getAllEntriesSync(): List<IpEntry> {
+        return db.ipDao().getAllEntriesOnce().filter { !it.deleted }
+    }
+
+    suspend fun replaceAllEntries(entries: List<IpEntry>) {
+        db.ipDao().deleteAll()
+        entries.forEach { db.ipDao().insert(it) }
+    }
+
+    fun exportEntries(entries: List<IpEntry>): String {
         val root = JSONObject()
         root.put("version", 1)
         root.put("exportTime", System.currentTimeMillis())
@@ -464,8 +474,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         root.put("entries", entriesArray)
         return root.toString()
-    }
-
     suspend fun getAllEntriesSync(): List<IpEntry> {
         return db.ipDao().getAllEntriesOnce().filter { !it.deleted }
     }
@@ -495,4 +503,5 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         root.put("entries", entriesArray)
         return root.toString()
+    }
     }
