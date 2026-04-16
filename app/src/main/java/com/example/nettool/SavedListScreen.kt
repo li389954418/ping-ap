@@ -336,35 +336,6 @@ fun SavedListScreen(
                         }
                     }
 
-                    // 单组 IMS 字段（兼容旧数据）
-                    if (entry.category == "IMS" && imsGroups.isEmpty()) {
-                        val port = extraJson.optString("ims_port", "")
-                        val number = extraJson.optString("ims_number", "")
-                        val password = extraJson.optString("ims_password", "")
-                        if (port.isNotBlank() || number.isNotBlank() || password.isNotBlank()) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text("📞 号码信息", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                            if (port.isNotBlank()) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text("端口: ", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                    Text(port, fontSize = 12.sp, modifier = Modifier.combinedClickable(onClick = {}, onLongClick = { copyToClipboard(port, "端口") }))
-                                }
-                            }
-                            if (number.isNotBlank()) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text("号码: ", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                    Text(number, fontSize = 12.sp, modifier = Modifier.combinedClickable(onClick = {}, onLongClick = { copyToClipboard(number, "号码") }))
-                                }
-                            }
-                            if (password.isNotBlank()) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text("密码: ", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                    Text(password, fontSize = 12.sp, modifier = Modifier.combinedClickable(onClick = {}, onLongClick = { copyToClipboard(password, "密码") }))
-                                }
-                            }
-                        }
-                    }
-
                     // 其他备注
                     if (items.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(8.dp))
