@@ -1,5 +1,5 @@
-import org.json.JSONArray
 package com.example.nettool
+import org.json.JSONArray
 
 import android.widget.Toast
 import androidx.compose.foundation.layout.*
