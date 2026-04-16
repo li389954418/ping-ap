@@ -5,6 +5,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -38,6 +39,7 @@ fun SavedListScreen(
     var editingEntry by remember { mutableStateOf<IpEntry?>(null) }
     var showDetailDialog by remember { mutableStateOf<IpEntry?>(null) }
     var showAddCategoryDialog by remember { mutableStateOf(false) }
+    var showMenuForEntry by remember { mutableStateOf<IpEntry?>(null) }
 
     var remarkItems by remember { mutableStateOf(listOf<Pair<String, String>>()) }
     var mainRemark by remember { mutableStateOf("") }
@@ -46,10 +48,12 @@ fun SavedListScreen(
     var imsNumber by remember { mutableStateOf("") }
     var imsPassword by remember { mutableStateOf("") }
 
+    var showImsTableExpanded by remember { mutableStateOf(false) }
+
     fun copyToClipboard(text: String, label: String = "复制内容") {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         clipboard.setPrimaryClip(ClipData.newPlainText(label, text))
-        Toast.makeText(context, "已复制到剪贴板", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, "已复制", Toast.LENGTH_SHORT).show()
     }
 
     fun getFullInfo(entry: IpEntry): String {
@@ -60,11 +64,39 @@ fun SavedListScreen(
             appendLine("IP地址: ${entry.address}")
             if (addr.isNotBlank()) appendLine("地址: $addr")
             json.keys().forEach { key ->
-                if (key != "地址" && key != "address" && !key.matches(Regex("IP\\d+"))) {
+                if (key != "地址" && key != "address" && !key.matches(Regex("IP\\d+")) && !key.startsWith("ims_")) {
                     appendLine("$key: ${json.optString(key)}")
                 }
             }
         }
+    }
+
+    fun getImsGroups(extraRemarks: String): List<ImsGroup> {
+        val json = try { JSONObject(extraRemarks) } catch (e: Exception) { JSONObject() }
+        val groups = mutableMapOf<String, MutableMap<String, String>>()
+        json.keys().forEach { key ->
+            when {
+                key.startsWith("ims_port_") -> {
+                    val index = key.removePrefix("ims_port_")
+                    groups.getOrPut(index) { mutableMapOf() }["port"] = json.optString(key)
+                }
+                key.startsWith("ims_number_") -> {
+                    val index = key.removePrefix("ims_number_")
+                    groups.getOrPut(index) { mutableMapOf() }["number"] = json.optString(key)
+                }
+                key.startsWith("ims_password_") -> {
+                    val index = key.removePrefix("ims_password_")
+                    groups.getOrPut(index) { mutableMapOf() }["password"] = json.optString(key)
+                }
+            }
+        }
+        return groups.map { (index, map) ->
+            ImsGroup(
+                port = map["port"] ?: "",
+                number = map["number"] ?: "",
+                password = map["password"] ?: ""
+            )
+        }.sortedBy { it.port.toIntOrNull() ?: 999 }
     }
 
     fun startEditing(entry: IpEntry) {
@@ -78,7 +110,7 @@ fun SavedListScreen(
         val items = mutableListOf<Pair<String, String>>()
         json.keys().forEach { key ->
             if (key != "地址" && key != "address" && !key.matches(Regex("IP\\d+"))
-                && key != "ims_port" && key != "ims_number" && key != "ims_password") {
+                && !key.startsWith("ims_")) {
                 items.add(key to json.optString(key, ""))
             }
         }
@@ -139,12 +171,8 @@ fun SavedListScreen(
                                     onNavigateToHome()
                                 }
                             },
-                            onDoubleClick = {
-                                copyToClipboard(entry.address, "IP地址")
-                            },
-                            onLongClick = {
-                                startEditing(entry)
-                            }
+                            onDoubleClick = { copyToClipboard(entry.address, "IP地址") },
+                            onLongClick = { showMenuForEntry = entry }
                         ),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                 ) {
@@ -168,6 +196,28 @@ fun SavedListScreen(
                         }
                     }
                 }
+
+                DropdownMenu(
+                    expanded = showMenuForEntry?.id == entry.id,
+                    onDismissRequest = { showMenuForEntry = null }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("编辑") },
+                        onClick = {
+                            showMenuForEntry = null
+                            startEditing(entry)
+                        },
+                        leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("删除") },
+                        onClick = {
+                            showMenuForEntry = null
+                            viewModel.softDeleteEntry(entry)
+                        },
+                        leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) }
+                    )
+                }
             }
         }
     }
@@ -177,195 +227,152 @@ fun SavedListScreen(
         AlertDialog(
             onDismissRequest = { showAddCategoryDialog = false },
             title = { Text("新增分页") },
-            text = {
-                OutlinedTextField(
-                    value = newCategoryName,
-                    onValueChange = { newCategoryName = it },
-                    label = { Text("分页名称") },
-                    singleLine = true
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    if (newCategoryName.isNotBlank()) viewModel.addCategory(newCategoryName)
-                    showAddCategoryDialog = false
-                }) { Text("确定") }
-            },
+            text = { OutlinedTextField(value = newCategoryName, onValueChange = { newCategoryName = it }, label = { Text("分页名称") }, singleLine = true) },
+            confirmButton = { TextButton(onClick = { if (newCategoryName.isNotBlank()) viewModel.addCategory(newCategoryName); showAddCategoryDialog = false }) { Text("确定") } },
             dismissButton = { TextButton(onClick = { showAddCategoryDialog = false }) { Text("取消") } }
         )
     }
 
-    // 详情弹窗（支持双击字段值编辑）
+    // 详情弹窗
     showDetailDialog?.let { entry ->
         val extraJson = try { JSONObject(entry.extraRemarks) } catch (e: Exception) { JSONObject() }
         val items = mutableListOf<Pair<String, String>>()
-        val imsItems = mutableListOf<Pair<String, String>>()
         extraJson.keys().forEach { key ->
             when {
                 key == "地址" || key == "address" || key.matches(Regex("IP\\d+")) -> {}
-                key.startsWith("ims_") -> imsItems.add(key.removePrefix("ims_") to extraJson.optString(key, ""))
-                else -> items.add(key to extraJson.optString(key, ""))
+                key.startsWith("ims_") && !key.contains("_port_") && !key.contains("_number_") && !key.contains("_password_") -> {
+                    items.add(key.removePrefix("ims_") to extraJson.optString(key, ""))
+                }
+                !key.startsWith("ims_") -> items.add(key to extraJson.optString(key, ""))
             }
         }
+        val imsGroups = if (entry.category == "IMS") getImsGroups(entry.extraRemarks) else emptyList()
 
         AlertDialog(
             onDismissRequest = { showDetailDialog = null },
             title = { Text("详细信息") },
             text = {
-                Column {
-                    // 可编辑的客户名称
+                Column(modifier = Modifier.heightIn(max = 500.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("客户名称: ", fontWeight = FontWeight.Bold)
-                        var isEditingName by remember { mutableStateOf(false) }
-                        if (isEditingName) {
-                            var tempName by remember { mutableStateOf(entry.name) }
-                            OutlinedTextField(
-                                value = tempName,
-                                onValueChange = { tempName = it },
-                                modifier = Modifier.weight(1f),
-                                singleLine = true
-                            )
-                            Row {
-                                IconButton(onClick = {
-                                    viewModel.updateEntry(entry.copy(name = tempName))
-                                    showDetailDialog = entry.copy(name = tempName)
-                                    isEditingName = false
-                                }) { Icon(Icons.Default.Check, contentDescription = "确认") }
-                                IconButton(onClick = { isEditingName = false }) { Icon(Icons.Default.Close, contentDescription = "取消") }
-                            }
-                        } else {
-                            Text(entry.name, modifier = Modifier.combinedClickable(
-                                onClick = {},
-                                onDoubleClick = { isEditingName = true }
-                            ).weight(1f))
-                        }
+                        Text(entry.name, modifier = Modifier.combinedClickable(onClick = {}, onLongClick = { copyToClipboard(entry.name, "客户名称") }).weight(1f))
                     }
-
-                    // 可编辑的 IP 地址
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("IP/域名: ", fontWeight = FontWeight.Bold)
-                        var isEditingIP by remember { mutableStateOf(false) }
-                        if (isEditingIP) {
-                            var tempIP by remember { mutableStateOf(entry.address) }
-                            OutlinedTextField(
-                                value = tempIP,
-                                onValueChange = { tempIP = it },
-                                modifier = Modifier.weight(1f),
-                                singleLine = true
-                            )
-                            Row {
-                                IconButton(onClick = {
-                                    viewModel.updateEntry(entry.copy(address = tempIP))
-                                    showDetailDialog = entry.copy(address = tempIP)
-                                    isEditingIP = false
-                                }) { Icon(Icons.Default.Check, contentDescription = "确认") }
-                                IconButton(onClick = { isEditingIP = false }) { Icon(Icons.Default.Close, contentDescription = "取消") }
-                            }
-                        } else {
-                            Text(entry.address, modifier = Modifier.combinedClickable(
-                                onClick = {},
-                                onDoubleClick = { isEditingIP = true }
-                            ).weight(1f))
-                        }
+                        Text(entry.address, modifier = Modifier.combinedClickable(onClick = {}, onLongClick = { copyToClipboard(entry.address, "IP地址") }).weight(1f))
                     }
-
                     if (entry.category != "互联网") {
                         Text("分类: ${entry.category}")
                     }
-
                     Spacer(modifier = Modifier.height(8.dp))
-
-                    // 可编辑的地址
                     val addr = extraJson.optString("地址", "").ifBlank { extraJson.optString("address", "") }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("地址: ", fontWeight = FontWeight.Bold)
-                        var isEditingAddr by remember { mutableStateOf(false) }
-                        var tempAddr by remember { mutableStateOf(addr) }
-                        if (isEditingAddr) {
-                            OutlinedTextField(
-                                value = tempAddr,
-                                onValueChange = { tempAddr = it },
-                                modifier = Modifier.weight(1f),
-                                singleLine = true
-                            )
-                            Row {
-                                IconButton(onClick = {
-                                    val newJson = JSONObject(entry.extraRemarks)
-                                    newJson.put("地址", tempAddr)
-                                    viewModel.updateEntry(entry.copy(extraRemarks = newJson.toString()))
-                                    showDetailDialog = entry.copy(extraRemarks = newJson.toString())
-                                    isEditingAddr = false
-                                }) { Icon(Icons.Default.Check, contentDescription = "确认") }
-                                IconButton(onClick = { isEditingAddr = false }) { Icon(Icons.Default.Close, contentDescription = "取消") }
-                            }
-                        } else {
-                            Text(if (addr.isBlank()) "—" else addr, modifier = Modifier.combinedClickable(
-                                onClick = {},
-                                onDoubleClick = { isEditingAddr = true }
-                            ).weight(1f))
+                    if (addr.isNotBlank()) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("地址: ", fontWeight = FontWeight.Bold)
+                            Text(addr, modifier = Modifier.combinedClickable(onClick = {}, onLongClick = { copyToClipboard(addr, "地址") }).weight(1f))
                         }
                     }
 
-                    // IMS 字段
-                    imsItems.forEach { (k, v) ->
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("$k: ", fontWeight = FontWeight.Bold)
-                            var isEditing by remember { mutableStateOf(false) }
-                            var tempValue by remember { mutableStateOf(v) }
-                            if (isEditing) {
-                                OutlinedTextField(
-                                    value = tempValue,
-                                    onValueChange = { tempValue = it },
-                                    modifier = Modifier.weight(1f),
-                                    singleLine = true
-                                )
-                                Row {
-                                    IconButton(onClick = {
-                                        val newJson = JSONObject(entry.extraRemarks)
-                                        newJson.put("ims_$k", tempValue)
-                                        viewModel.updateEntry(entry.copy(extraRemarks = newJson.toString()))
-                                        showDetailDialog = entry.copy(extraRemarks = newJson.toString())
-                                        isEditing = false
-                                    }) { Icon(Icons.Default.Check, contentDescription = "确认") }
-                                    IconButton(onClick = { isEditing = false }) { Icon(Icons.Default.Close, contentDescription = "取消") }
+                    // IMS 号码表
+                    if (imsGroups.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                        ) {
+                            Column(modifier = Modifier.padding(8.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().clickable { showImsTableExpanded = !showImsTableExpanded },
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("📞 号码表 (${imsGroups.size}组)", fontWeight = FontWeight.Bold)
+                                    Icon(
+                                        if (showImsTableExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                        contentDescription = null
+                                    )
                                 }
-                            } else {
-                                Text(tempValue, modifier = Modifier.combinedClickable(
-                                    onClick = {},
-                                    onDoubleClick = { isEditing = true }
-                                ).weight(1f))
+                                if (showImsTableExpanded) {
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    imsGroups.forEach { group ->
+                                        Card(
+                                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth().padding(12.dp),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.Top
+                                            ) {
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        Text("端口: ", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                                        Text(group.port, fontSize = 12.sp, modifier = Modifier.combinedClickable(onClick = {}, onLongClick = { copyToClipboard(group.port, "端口") }))
+                                                    }
+                                                    Spacer(modifier = Modifier.height(4.dp))
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        Text("号码: ", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                                        Text(group.number, fontSize = 12.sp, modifier = Modifier.combinedClickable(onClick = {}, onLongClick = { copyToClipboard(group.number, "号码") }))
+                                                    }
+                                                    Spacer(modifier = Modifier.height(4.dp))
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        Text("密码: ", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                                        Text(group.password, fontSize = 12.sp, modifier = Modifier.combinedClickable(onClick = {}, onLongClick = { copyToClipboard(group.password, "密码") }))
+                                                    }
+                                                }
+                                                IconButton(
+                                                    onClick = {
+                                                        val content = "端口: ${group.port}\n号码: ${group.number}\n密码: ${group.password}"
+                                                        copyToClipboard(content, "号码信息")
+                                                    }
+                                                ) {
+                                                    Icon(Icons.Default.ContentCopy, contentDescription = "复制", modifier = Modifier.size(20.dp))
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
 
-                    // 其他备注字段
-                    items.forEach { (k, v) ->
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("$k: ", fontWeight = FontWeight.Bold)
-                            var isEditing by remember { mutableStateOf(false) }
-                            var tempValue by remember { mutableStateOf(v) }
-                            if (isEditing) {
-                                OutlinedTextField(
-                                    value = tempValue,
-                                    onValueChange = { tempValue = it },
-                                    modifier = Modifier.weight(1f),
-                                    singleLine = true
-                                )
-                                Row {
-                                    IconButton(onClick = {
-                                        val newJson = JSONObject(entry.extraRemarks)
-                                        newJson.put(k, tempValue)
-                                        viewModel.updateEntry(entry.copy(extraRemarks = newJson.toString()))
-                                        showDetailDialog = entry.copy(extraRemarks = newJson.toString())
-                                        isEditing = false
-                                    }) { Icon(Icons.Default.Check, contentDescription = "确认") }
-                                    IconButton(onClick = { isEditing = false }) { Icon(Icons.Default.Close, contentDescription = "取消") }
+                    // 单组 IMS 字段（兼容旧数据）
+                    if (entry.category == "IMS" && imsGroups.isEmpty()) {
+                        val port = extraJson.optString("ims_port", "")
+                        val number = extraJson.optString("ims_number", "")
+                        val password = extraJson.optString("ims_password", "")
+                        if (port.isNotBlank() || number.isNotBlank() || password.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("📞 号码信息", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            if (port.isNotBlank()) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("端口: ", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                    Text(port, fontSize = 12.sp, modifier = Modifier.combinedClickable(onClick = {}, onLongClick = { copyToClipboard(port, "端口") }))
                                 }
-                            } else {
-                                Text(tempValue, modifier = Modifier.combinedClickable(
-                                    onClick = {},
-                                    onDoubleClick = { isEditing = true }
-                                ).weight(1f))
+                            }
+                            if (number.isNotBlank()) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("号码: ", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                    Text(number, fontSize = 12.sp, modifier = Modifier.combinedClickable(onClick = {}, onLongClick = { copyToClipboard(number, "号码") }))
+                                }
+                            }
+                            if (password.isNotBlank()) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("密码: ", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                    Text(password, fontSize = 12.sp, modifier = Modifier.combinedClickable(onClick = {}, onLongClick = { copyToClipboard(password, "密码") }))
+                                }
+                            }
+                        }
+                    }
+
+                    // 其他备注
+                    if (items.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("额外备注", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        items.forEach { (k, v) ->
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("$k: ", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                Text(v, fontSize = 12.sp, modifier = Modifier.combinedClickable(onClick = {}, onLongClick = { copyToClipboard(v, k) }))
                             }
                         }
                     }
@@ -380,12 +387,13 @@ fun SavedListScreen(
             dismissButton = {
                 TextButton(onClick = {
                     showDetailDialog = null
-                    startEditing(entry)
-                }) { Text("完整编辑") }
+                    showMenuForEntry = entry
+                }) { Text("编辑") }
             }
         )
     }
 
+    // 编辑对话框
     if (editingEntry != null) {
         AlertDialog(
             onDismissRequest = { editingEntry = null },
@@ -446,3 +454,5 @@ fun SavedListScreen(
         )
     }
 }
+
+data class ImsGroup(val port: String, val number: String, val password: String)

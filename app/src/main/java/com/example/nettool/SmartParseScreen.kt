@@ -55,11 +55,13 @@ fun SmartParseScreen(
     var imsDropdownExpanded by remember { mutableStateOf(false) }
 
     val imsEntries = allEntries.filter { it.category == "IMS" }
-    val filteredImsEntries = imsEntries.filter {
-        imsLocator.isBlank() || it.address.contains(imsLocator, ignoreCase = true) ||
-        it.name.contains(imsLocator, ignoreCase = true) ||
-        (try { JSONObject(it.extraRemarks).optString("产品实例标识").contains(imsLocator) } catch (e: Exception) { false })
-    }
+    val filteredImsEntries = if (imsLocator.isNotBlank()) {
+        imsEntries.filter {
+            it.address.contains(imsLocator, ignoreCase = true) ||
+            it.name.contains(imsLocator, ignoreCase = true) ||
+            (try { JSONObject(it.extraRemarks).optString("产品实例标识").contains(imsLocator) } catch (e: Exception) { false })
+        }
+    } else emptyList()
 
     fun startEditing(entry: IpEntry) {
         editingEntry = entry
@@ -71,8 +73,7 @@ fun SmartParseScreen(
         json.keys().forEach { key ->
             when {
                 key == "地址" || key == "address" || key.matches(Regex("IP\\d+")) ||
-                key == "ims_port" || key == "ims_number" || key == "ims_password" ||
-                key == "route" -> { }
+                key.startsWith("ims_") || key == "route" -> { }
                 else -> items.add(key to json.optString(key, ""))
             }
         }
@@ -133,9 +134,7 @@ fun SmartParseScreen(
                     if (port.isNotBlank() || number.isNotBlank() || password.isNotBlank()) {
                         viewModel.updateImsEntry(target, port, number, password)
                         success++
-                    } else {
-                        fail++
-                    }
+                    } else { fail++ }
                 }
                 Toast.makeText(context, "批量完成: 成功 $success 条, 失败 $fail 条", Toast.LENGTH_LONG).show()
             } else {
@@ -143,10 +142,13 @@ fun SmartParseScreen(
                 val target = viewModel.findImsEntry(imsLocator)
                 if (target == null) { Toast.makeText(context, "未找到匹配的 IMS 记录", Toast.LENGTH_SHORT).show(); return@launch }
                 val (port, number, password) = viewModel.parseImsInfo(imsRawText)
-                if (port.isBlank() && number.isBlank() && password.isBlank()) { Toast.makeText(context, "未能识别到有效信息", Toast.LENGTH_SHORT).show(); return@launch }
-                viewModel.updateImsEntry(target, port, number, password)
-                Toast.makeText(context, "已更新 IMS 记录: ${target.name}", Toast.LENGTH_SHORT).show()
-                imsLocator = ""
+                if (port.isNotBlank() || number.isNotBlank() || password.isNotBlank()) {
+                    viewModel.updateImsEntry(target, port, number, password)
+                    Toast.makeText(context, "已更新 IMS 记录: ${target.name}", Toast.LENGTH_SHORT).show()
+                    imsLocator = ""
+                } else {
+                    Toast.makeText(context, "未能识别到有效信息", Toast.LENGTH_SHORT).show()
+                }
             }
             imsRawText = ""
         }
@@ -179,20 +181,25 @@ fun SmartParseScreen(
         Text("📞 号码保存", style = MaterialTheme.typography.titleMedium)
         Spacer(modifier = Modifier.height(8.dp))
 
-        ExposedDropdownMenuBox(expanded = imsDropdownExpanded && filteredImsEntries.isNotEmpty(), onExpandedChange = { imsDropdownExpanded = it }) {
+        ExposedDropdownMenuBox(
+            expanded = imsDropdownExpanded && filteredImsEntries.isNotEmpty(),
+            onExpandedChange = { if (imsLocator.isNotBlank()) imsDropdownExpanded = it }
+        ) {
             OutlinedTextField(
                 value = imsLocator,
-                onValueChange = { imsLocator = it; imsDropdownExpanded = true },
+                onValueChange = { imsLocator = it; imsDropdownExpanded = it.isNotBlank() },
                 label = { Text("搜索 IMS 记录（IP/名称/产品标识）") },
                 modifier = Modifier.fillMaxWidth().menuAnchor(),
                 singleLine = true
             )
-            ExposedDropdownMenu(expanded = imsDropdownExpanded && filteredImsEntries.isNotEmpty(), onDismissRequest = { imsDropdownExpanded = false }) {
-                filteredImsEntries.take(10).forEach { entry ->
-                    DropdownMenuItem(
-                        text = { Column { Text(entry.name.ifBlank { "未命名" }); Text(entry.address, style = MaterialTheme.typography.bodySmall) } },
-                        onClick = { imsLocator = entry.address; imsDropdownExpanded = false }
-                    )
+            if (filteredImsEntries.isNotEmpty()) {
+                ExposedDropdownMenu(expanded = imsDropdownExpanded, onDismissRequest = { imsDropdownExpanded = false }) {
+                    filteredImsEntries.take(10).forEach { entry ->
+                        DropdownMenuItem(
+                            text = { Column { Text(entry.name.ifBlank { "未命名" }); Text(entry.address, style = MaterialTheme.typography.bodySmall) } },
+                            onClick = { imsLocator = entry.address; imsDropdownExpanded = false }
+                        )
+                    }
                 }
             }
         }
