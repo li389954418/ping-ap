@@ -9,7 +9,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import org.json.JSONArray
 import org.json.JSONObject
 
-@Database(entities = [IpEntry::class, TemplateEntry::class], version = 7)
+@Database(entities = [IpEntry::class, TemplateEntry::class], version = 6)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun ipDao(): IpDao
     abstract fun templateDao(): TemplateDao
@@ -83,17 +83,13 @@ abstract class AppDatabase : RoomDatabase() {
 
         private val MIGRATION_5_6 = object : Migration(5, 6) {
             override fun migrate(database: SupportSQLiteDatabase) {
+                // IpEntry 增加时间戳和软删除字段
                 database.execSQL("ALTER TABLE ip_table ADD COLUMN createdAt INTEGER NOT NULL DEFAULT 0")
                 database.execSQL("ALTER TABLE ip_table ADD COLUMN updatedAt INTEGER NOT NULL DEFAULT 0")
                 database.execSQL("ALTER TABLE ip_table ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0")
+                // TemplateEntry 增加去重和冲突策略字段
                 database.execSQL("ALTER TABLE template_table ADD COLUMN duplicateKeys TEXT NOT NULL DEFAULT '[]'")
                 database.execSQL("ALTER TABLE template_table ADD COLUMN conflictStrategy TEXT NOT NULL DEFAULT '{}'")
-            }
-        }
-
-        private val MIGRATION_6_7 = object : Migration(6, 7) {
-            override fun migrate(database: SupportSQLiteDatabase) {
-                database.execSQL("ALTER TABLE ip_table ADD COLUMN userName TEXT NOT NULL DEFAULT ''")
             }
         }
 
@@ -103,7 +99,7 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "ip_database"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                  .build()
                 INSTANCE = instance
                 instance

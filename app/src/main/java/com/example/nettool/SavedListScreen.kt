@@ -18,10 +18,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.datastore.preferences.preferencesDataStore
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.runBlocking
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -39,7 +35,6 @@ fun SavedListScreen(
     val categories by viewModel.categories.collectAsState(initial = emptyList())
     val selectedCategory by viewModel.selectedCategory.collectAsState()
     val context = LocalContext.current
-    val currentUserName = remember { runCatching { runBlocking { context.dataStore.data.first()[ThemeManager.USER_NAME] ?: "" } }.getOrDefault("") }
 
     var editingEntry by remember { mutableStateOf<IpEntry?>(null) }
     var showDetailDialog by remember { mutableStateOf<IpEntry?>(null) }
@@ -194,9 +189,6 @@ fun SavedListScreen(
                             Text("📍 ${getCustomerAddress(entry.extraRemarks)}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             if (selectedCategory == "全部" && entry.category != "互联网") {
                                 Text("分类: ${entry.category}", fontSize = 10.sp, color = MaterialTheme.colorScheme.primary)
-                            if (entry.userName.isNotBlank() && entry.userName != currentUserName) {
-                                Text("备份人: ${entry.userName}", fontSize = 10.sp, color = MaterialTheme.colorScheme.tertiary)
-                            }
                             }
                         }
                         IconButton(onClick = { showDetailDialog = entry }) {
@@ -339,6 +331,35 @@ fun SavedListScreen(
                                             }
                                         }
                                     }
+                                }
+                            }
+                        }
+                    }
+
+                    // 单组 IMS 字段（兼容旧数据）
+                    if (entry.category == "IMS" && imsGroups.isEmpty()) {
+                        val port = extraJson.optString("ims_port", "")
+                        val number = extraJson.optString("ims_number", "")
+                        val password = extraJson.optString("ims_password", "")
+                        if (port.isNotBlank() || number.isNotBlank() || password.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("📞 号码信息", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            if (port.isNotBlank()) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("端口: ", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                    Text(port, fontSize = 12.sp, modifier = Modifier.combinedClickable(onClick = {}, onLongClick = { copyToClipboard(port, "端口") }))
+                                }
+                            }
+                            if (number.isNotBlank()) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("号码: ", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                    Text(number, fontSize = 12.sp, modifier = Modifier.combinedClickable(onClick = {}, onLongClick = { copyToClipboard(number, "号码") }))
+                                }
+                            }
+                            if (password.isNotBlank()) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("密码: ", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                    Text(password, fontSize = 12.sp, modifier = Modifier.combinedClickable(onClick = {}, onLongClick = { copyToClipboard(password, "密码") }))
                                 }
                             }
                         }

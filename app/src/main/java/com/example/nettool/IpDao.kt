@@ -5,10 +5,10 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface IpDao {
-    @Query("SELECT * FROM ip_table ORDER BY id DESC")
+    @Query("SELECT * FROM ip_table WHERE deleted = 0 ORDER BY id DESC")
     fun getAllEntries(): Flow<List<IpEntry>>
 
-    @Query("SELECT * FROM ip_table WHERE category = :category ORDER BY id DESC")
+    @Query("SELECT * FROM ip_table WHERE category = :category AND deleted = 0 ORDER BY id DESC")
     fun getEntriesByCategory(category: String): Flow<List<IpEntry>>
 
     @Query("SELECT * FROM ip_table WHERE deleted = 1 ORDER BY updatedAt DESC")
@@ -28,7 +28,4 @@ interface IpDao {
 
     @Query("DELETE FROM ip_table WHERE deleted = 1")
     suspend fun permanentlyDeleteAllDeleted()
-
-    @Query("DELETE FROM ip_table")
-    suspend fun deleteAll()
 }
